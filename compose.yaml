@@ -1,0 +1,46 @@
+# Manifest for Aiven Runtime: orchestrates the three services this demo
+# needs. Application services (backend, frontend) specify a `build` context
+# and get built from their Dockerfile; the data service specifies a standard
+# `image` tag instead — Aiven Runtime recognizes it and offers to either
+# provision a new managed service or link the existing one (space-colony-pg,
+# provisioned by infra/terraform) via the swap-to-existing icon in the
+# console's composer view before deploying.
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - space-colony-pg
+    # Matches the placeholder creds on space-colony-pg below — lets `docker
+    # compose up` work standalone. Aiven Runtime overwrites these with the
+    # real values once you connect the actual space-colony-pg service in
+    # the console, regardless of what's set here.
+    environment:
+      - PGHOST=space-colony-pg
+      - PGPORT=5432
+      - PGUSER=app_runtime
+      - PGPASSWORD=placeholder
+      - PGDATABASE=space_colony
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      - backend
+
+  # Placeholder credentials below only matter if Aiven provisions a brand
+  # new service from this definition. Swap to the existing space-colony-pg
+  # service in the console instead, and the real credentials get injected
+  # into `backend` automatically.
+  space-colony-pg:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: space_colony
+      POSTGRES_USER: app_runtime
+      POSTGRES_PASSWORD: placeholder
