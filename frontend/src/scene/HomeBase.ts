@@ -1,28 +1,45 @@
 import * as THREE from "three";
 import { store } from "../state/gameState";
-
-const BUILDING_COLORS: Record<string, number> = {
-  solar_array: 0xffd166,
-  mining_rig: 0xef476f,
-  ice_extractor: 0x4cc9f0,
-  shipyard: 0x9b5de5,
-  sensor_array: 0x80ffdb,
-  refinery: 0xf3722c,
-};
+import { planetTexture } from "./textures";
+import { buildBuildingModel } from "./BuildingModels";
 
 const SLOT_RADIUS = 6;
+
+function buildAtmosphere(): THREE.Mesh {
+  // Slightly larger, translucent, additive-blended shell around the planet
+  // — cheap stand-in for cloud cover without a texture/shader dependency.
+  const geo = new THREE.IcosahedronGeometry(3.4, 1);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0x9fe3c8,
+    transparent: true,
+    opacity: 0.12,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  return new THREE.Mesh(geo, mat);
+}
 
 export class HomeBase {
   readonly group = new THREE.Group();
   private planet: THREE.Mesh;
+  private atmosphere: THREE.Mesh;
   private buildingSlots = new THREE.Group();
 
   constructor() {
-    const planetGeo = new THREE.IcosahedronGeometry(3, 1);
-    const planetMat = new THREE.MeshStandardMaterial({ color: 0x2d6a4f, flatShading: true, roughness: 0.8 });
+    const planetGeo = new THREE.SphereGeometry(3, 48, 32);
+    const planetMat = new THREE.MeshStandardMaterial({
+      map: planetTexture("#2d6a4f", "#1d4a35"),
+      roughness: 0.8,
+      emissive: 0x0a2a1f,
+      emissiveIntensity: 0.25,
+    });
     this.planet = new THREE.Mesh(planetGeo, planetMat);
-    this.group.add(this.planet);
-    this.group.add(this.buildingSlots);
+    this.atmosphere = buildAtmosphere();
+
+    const glow = new THREE.PointLight(0x9fe3c8, 0.8, 12);
+    this.planet.add(glow);
+
+    this.group.add(this.planet, this.atmosphere, this.buildingSlots);
 
     store.subscribe(() => this.syncBuildings());
     this.syncBuildings();
@@ -30,6 +47,8 @@ export class HomeBase {
 
   update(dt: number): void {
     this.planet.rotation.y += dt * 0.05;
+    this.atmosphere.rotation.y -= dt * 0.02;
+    this.atmosphere.rotation.x += dt * 0.008;
     this.buildingSlots.rotation.y += dt * 0.03;
   }
 
@@ -46,19 +65,11 @@ export class HomeBase {
       const x = Math.cos(angle) * SLOT_RADIUS;
       const z = Math.sin(angle) * SLOT_RADIUS;
 
-      const color = BUILDING_COLORS[building.building_code] ?? 0xaaaaaa;
-      const size = 0.6 + building.level * 0.15;
-      const geo = new THREE.BoxGeometry(size, size, size);
-      const mat = new THREE.MeshStandardMaterial({
-        color,
-        flatShading: true,
-        opacity: building.status === "constructing" ? 0.5 : 1,
-        transparent: building.status === "constructing",
-      });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(x, 0, z);
-      mesh.userData = { buildingId: building.id };
-      this.buildingSlots.add(mesh);
+      const model = buildBuildingModel(building.building_code, building.level, building.status);
+      model.position.set(x, 0, z);
+      model.rotation.y = -angle; // face outward from the planet, away from center
+      model.userData = { buildingId: building.id };
+      this.buildingSlots.add(model);
     });
   }
 }
