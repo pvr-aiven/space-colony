@@ -85,3 +85,7 @@ export function dispatchShip(shipId: string, siteId: string): Promise<{ ship: un
     body: JSON.stringify({ site_id: siteId }),
   });
 }
+
+export function upgradeBase(): Promise<GameState> {
+  return request(`/sessions/${getStoredToken()}/base/upgrade`, { method: "POST" });
+}

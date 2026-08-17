@@ -1,5 +1,14 @@
 -- Static game catalog: resource/building/ship types and the fixed set of
--- explorable sites. Idempotent — safe to re-run against an empty DB.
+-- explorable sites. Idempotent — safe to re-run against an existing DB to
+-- push catalog/balance tweaks (uses DO UPDATE, not DO NOTHING, precisely so
+-- re-running this after a rate/cost change actually takes effect).
+
+INSERT INTO base_tiers (tier, build_slots, upgrade_cost) VALUES
+    (1, 4, NULL),
+    (2, 6, '{"unlock_tokens": 5}')
+ON CONFLICT (tier) DO UPDATE SET
+    build_slots = EXCLUDED.build_slots,
+    upgrade_cost = EXCLUDED.upgrade_cost;
 
 INSERT INTO resource_types (code, display_name, is_currency) VALUES
     ('metal', 'Metal', false),
@@ -7,22 +16,39 @@ INSERT INTO resource_types (code, display_name, is_currency) VALUES
     ('energy', 'Energy', false),
     ('rare_isotopes', 'Rare Isotopes', false),
     ('unlock_tokens', 'Unlock Tokens', true)
-ON CONFLICT (code) DO NOTHING;
+ON CONFLICT (code) DO UPDATE SET
+    display_name = EXCLUDED.display_name,
+    is_currency = EXCLUDED.is_currency;
 
+-- production rate_per_hour values are tuned for a live demo (visible
+-- movement within seconds on an 8s poll), not for a realistic idle-game
+-- economy — a "per hour" label with these numbers is intentionally fictional.
 INSERT INTO building_types (code, display_name, max_level, min_base_tier, base_cost, cost_growth_factor, production, unlocks_building_code) VALUES
-    ('solar_array',   'Solar Array',    3, 1, '{"metal": 40}',                     1.5, '{"resource": "energy", "rate_per_hour": 10}', NULL),
-    ('mining_rig',    'Mining Rig',     3, 1, '{"metal": 20, "energy": 10}',       1.5, '{"resource": "metal", "rate_per_hour": 15}',  NULL),
-    ('ice_extractor', 'Ice Extractor',  3, 1, '{"metal": 30, "energy": 10}',       1.5, '{"resource": "ice", "rate_per_hour": 12}',    NULL),
-    ('shipyard',      'Shipyard',       2, 1, '{"metal": 80, "ice": 20}',          1.6, NULL,                                          NULL),
-    ('sensor_array',  'Sensor Array',   2, 2, '{"metal": 60, "energy": 40}',       1.6, NULL,                                          'refinery'),
-    ('refinery',      'Refinery',       3, 2, '{"metal": 120, "ice": 40}',         1.7, '{"resource": "rare_isotopes", "rate_per_hour": 3}', NULL)
-ON CONFLICT (code) DO NOTHING;
+    ('solar_array',   'Solar Array',    3, 1, '{"metal": 40}',                     1.5, '{"resource": "energy", "rate_per_hour": 900}',  NULL),
+    ('mining_rig',    'Mining Rig',     3, 1, '{"metal": 20, "energy": 10}',       1.5, '{"resource": "metal", "rate_per_hour": 1350}',  NULL),
+    ('ice_extractor', 'Ice Extractor',  3, 1, '{"metal": 30, "energy": 10}',       1.5, '{"resource": "ice", "rate_per_hour": 1080}',    NULL),
+    ('shipyard',      'Shipyard',       2, 1, '{"metal": 80, "ice": 20}',          1.6, NULL,                                            NULL),
+    ('sensor_array',  'Sensor Array',   2, 2, '{"metal": 60, "energy": 40}',       1.6, NULL,                                            'refinery'),
+    ('refinery',      'Refinery',       3, 2, '{"metal": 120, "ice": 40}',         1.7, '{"resource": "rare_isotopes", "rate_per_hour": 360}', NULL)
+ON CONFLICT (code) DO UPDATE SET
+    display_name = EXCLUDED.display_name,
+    max_level = EXCLUDED.max_level,
+    min_base_tier = EXCLUDED.min_base_tier,
+    base_cost = EXCLUDED.base_cost,
+    cost_growth_factor = EXCLUDED.cost_growth_factor,
+    production = EXCLUDED.production,
+    unlocks_building_code = EXCLUDED.unlocks_building_code;
 
 INSERT INTO ship_types (code, display_name, min_base_tier, base_cost, cargo_capacity, speed_factor) VALUES
     ('scout',         'Scout',          1, '{"metal": 50, "energy": 20}',                 8,  1.5),
     ('freighter',     'Freighter',      1, '{"metal": 120, "ice": 30, "energy": 30}',      25, 1.0),
     ('heavy_cruiser',  'Heavy Cruiser',  2, '{"metal": 300, "ice": 80, "rare_isotopes": 10}', 40, 0.75)
-ON CONFLICT (code) DO NOTHING;
+ON CONFLICT (code) DO UPDATE SET
+    display_name = EXCLUDED.display_name,
+    min_base_tier = EXCLUDED.min_base_tier,
+    base_cost = EXCLUDED.base_cost,
+    cargo_capacity = EXCLUDED.cargo_capacity,
+    speed_factor = EXCLUDED.speed_factor;
 
 INSERT INTO sites (code, display_name, kind, difficulty, risk_pct, travel_time_minutes, yield_table, position) VALUES
     ('asteroid_belt_alpha', 'Asteroid Belt Alpha', 'asteroid', 1, 0.05, 5,
@@ -40,4 +66,11 @@ INSERT INTO sites (code, display_name, kind, difficulty, risk_pct, travel_time_m
     ('ancient_ruins', 'Ancient Ruins', 'derelict', 4, 0.35, 20,
         '{"rare_isotopes": [8, 18], "unlock_tokens": [2, 5]}',
         '{"x": 0, "y": -1, "z": 28}')
-ON CONFLICT (code) DO NOTHING;
+ON CONFLICT (code) DO UPDATE SET
+    display_name = EXCLUDED.display_name,
+    kind = EXCLUDED.kind,
+    difficulty = EXCLUDED.difficulty,
+    risk_pct = EXCLUDED.risk_pct,
+    travel_time_minutes = EXCLUDED.travel_time_minutes,
+    yield_table = EXCLUDED.yield_table,
+    position = EXCLUDED.position;

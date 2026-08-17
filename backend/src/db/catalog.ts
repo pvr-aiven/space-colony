@@ -1,7 +1,7 @@
 import { pool } from "./pool.js";
 
 export async function getCatalog() {
-  const [resourceTypes, buildingTypes, shipTypes, sites] = await Promise.all([
+  const [resourceTypes, buildingTypes, shipTypes, sites, baseTiers] = await Promise.all([
     pool.query(`SELECT code, display_name, is_currency FROM resource_types ORDER BY code`),
     pool.query(
       `SELECT code, display_name, max_level, min_base_tier, base_cost, cost_growth_factor, production, unlocks_building_code
@@ -15,6 +15,7 @@ export async function getCatalog() {
       `SELECT id, code, display_name, kind, difficulty, risk_pct, travel_time_minutes, yield_table, position
        FROM sites ORDER BY difficulty, code`,
     ),
+    pool.query(`SELECT tier, build_slots, upgrade_cost FROM base_tiers ORDER BY tier`),
   ]);
 
   return {
@@ -22,5 +23,6 @@ export async function getCatalog() {
     building_types: buildingTypes.rows,
     ship_types: shipTypes.rows,
     sites: sites.rows,
+    base_tiers: baseTiers.rows,
   };
 }

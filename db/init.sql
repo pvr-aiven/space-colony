@@ -21,6 +21,15 @@ CREATE TABLE IF NOT EXISTS bases (
     created_at      timestamptz NOT NULL DEFAULT now()
 );
 
+-- Progression tiers: each row past tier 1 is a base upgrade a player can
+-- buy with unlock_tokens, raising bases.tier and bases.build_slots and
+-- unlocking building_types/ship_types gated on that min_base_tier.
+CREATE TABLE IF NOT EXISTS base_tiers (
+    tier            int PRIMARY KEY,
+    build_slots     int NOT NULL,
+    upgrade_cost    jsonb -- cost to reach this tier from the previous one; NULL for tier 1 (starting tier)
+);
+
 -- ============ resources / inventory ============
 CREATE TABLE IF NOT EXISTS resource_types (
     code            text PRIMARY KEY,

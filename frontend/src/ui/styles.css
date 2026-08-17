@@ -75,7 +75,8 @@
   font-size: 12px;
 }
 
-.build-menu button {
+.build-menu button,
+.resource-bar button {
   background: #3fa9ff;
   border: none;
   color: #04101f;
@@ -86,7 +87,8 @@
   font-size: 12px;
 }
 
-.build-menu button:disabled {
+.build-menu button:disabled,
+.resource-bar button:disabled {
   background: #45505f;
   color: #9aa4b0;
   cursor: not-allowed;
@@ -95,6 +97,25 @@
 .build-menu .cost {
   opacity: 0.6;
   font-size: 11px;
+}
+
+.connection-banner {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  background: #7a1f2b;
+  color: #ffe8ea;
+  padding: 8px 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  z-index: 10;
 }
 
 .toast {

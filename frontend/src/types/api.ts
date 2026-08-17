@@ -82,11 +82,18 @@ export interface ShipType {
   speed_factor: string;
 }
 
+export interface BaseTier {
+  tier: number;
+  build_slots: number;
+  upgrade_cost: Record<string, number> | null;
+}
+
 export interface Catalog {
   resource_types: { code: string; display_name: string; is_currency: boolean }[];
   building_types: BuildingType[];
   ship_types: ShipType[];
   sites: Site[];
+  base_tiers: BaseTier[];
 }
 
 export interface ApiErrorPayload {
