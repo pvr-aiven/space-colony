@@ -1,0 +1,20 @@
+# terraform — state files hold plaintext secrets (admin/app_runtime
+# passwords, CA cert), so these patterns are unscoped to catch any stray
+# state file anywhere in the repo, not just infra/terraform/.
+.terraform/
+terraform.tfstate
+terraform.tfstate.*
+terraform.tfvars
+*.tfplan
+crash.log
+crash.*.log
+
+# node
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.local
+
+# misc
+.DS_Store

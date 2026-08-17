@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars (git-ignored) and fill in, or export TF_VAR_* env vars.
+# aiven_api_token is sensitive: prefer `export TF_VAR_aiven_api_token=...` over
+# writing it into a tfvars file that might get committed.
+
+aiven_project = "my-aiven-project"
+cloud_name    = "google-europe-west3"
+plan          = "startup-4"
+service_name  = "space-colony-pg"
+database_name = "space_colony"
