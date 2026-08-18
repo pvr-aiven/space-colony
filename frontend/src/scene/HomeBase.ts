@@ -3,7 +3,13 @@ import { store } from "../state/gameState";
 import { planetTexture } from "./textures";
 import { buildBuildingModel } from "./BuildingModels";
 
-const SLOT_RADIUS = 6;
+// Just outside the planet's surface (radius 3) — close enough to read as
+// "attached to the planet", far enough to clear the atmosphere shell
+// (radius 3.4). The old radius of 6 happened to land almost exactly on
+// top of two nearby site markers (asteroid_belt_alpha and ice_moon sit at
+// distance ~5-5.7 from the origin), which is what caused buildings to
+// visually clip through them.
+const SLOT_RADIUS = 3.9;
 
 function buildAtmosphere(): THREE.Mesh {
   // Slightly larger, translucent, additive-blended shell around the planet
@@ -41,7 +47,11 @@ export class HomeBase {
     const glow = new THREE.PointLight(0x9fe3c8, 0.8, 12);
     this.planet.add(glow);
 
-    this.group.add(this.planet, this.atmosphere, this.buildingSlots);
+    // buildingSlots is a child of the planet mesh, not a sibling — buildings
+    // are meant to be attached to the planet, so they should inherit its
+    // spin exactly rather than drifting at their own independent rate.
+    this.planet.add(this.buildingSlots);
+    this.group.add(this.planet, this.atmosphere);
 
     store.subscribe(() => this.syncBuildings());
     this.syncBuildings();
@@ -51,7 +61,6 @@ export class HomeBase {
     this.planet.rotation.y += dt * 0.05;
     this.atmosphere.rotation.y -= dt * 0.02;
     this.atmosphere.rotation.x += dt * 0.008;
-    this.buildingSlots.rotation.y += dt * 0.03;
   }
 
   private syncBuildings(): void {
