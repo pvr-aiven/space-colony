@@ -125,6 +125,40 @@ export function derelictPanelTexture(baseColor: string): THREE.CanvasTexture {
   return toTexture(c);
 }
 
+export function gasGiantTexture(baseColor: string, bandColor: string): THREE.CanvasTexture {
+  const size = 256;
+  const { canvas: c, ctx } = canvas(size);
+  ctx.fillStyle = baseColor;
+  ctx.fillRect(0, 0, size, size);
+
+  // Horizontal bands of varying thickness/opacity, like Jupiter's belts.
+  let y = 0;
+  while (y < size) {
+    const h = 8 + Math.random() * 26;
+    ctx.fillStyle = bandColor;
+    ctx.globalAlpha = 0.25 + Math.random() * 0.35;
+    ctx.fillRect(0, y, size, h);
+    y += h + Math.random() * 6;
+  }
+  ctx.globalAlpha = 1;
+
+  blotches(ctx, size, 6, () => "rgba(255,255,255,0.15)", [10, 24]); // storm swirls
+  return toTexture(c);
+}
+
+export function sunTexture(): THREE.CanvasTexture {
+  const size = 256;
+  const { canvas: c, ctx } = canvas(size);
+  const grad = ctx.createRadialGradient(size / 2, size / 2, size * 0.1, size / 2, size / 2, size * 0.5);
+  grad.addColorStop(0, "#fffbe0");
+  grad.addColorStop(0.6, "#ffe066");
+  grad.addColorStop(1, "#ff9d1f");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+  blotches(ctx, size, 30, () => "rgba(255,255,255,0.2)", [4, 12]); // flare texture
+  return toTexture(c);
+}
+
 // Displaces each vertex along its normal by a random amount, then recomputes
 // normals — turns a regular icosahedron into a craggy rock silhouette.
 export function makeCraggyGeometry(radius: number, detail: number, jitter: number): THREE.IcosahedronGeometry {

@@ -3,6 +3,7 @@ import { SceneManager } from "./scene/SceneManager";
 import { HomeBase } from "./scene/HomeBase";
 import { Sites } from "./scene/Site";
 import { Ships } from "./scene/Ship";
+import { SolarSystem } from "./scene/SolarSystem";
 import { store } from "./state/gameState";
 import { connectionStatus } from "./state/connection";
 import { collectResources, getCatalog, getState, loadOrCreateSession } from "./api/client";
@@ -39,11 +40,13 @@ const sceneManager = new SceneManager(container);
 const homeBase = new HomeBase();
 const sites = new Sites();
 const ships = new Ships(sites);
-sceneManager.scene.add(homeBase.group, sites.group, ships.group);
+const solarSystem = new SolarSystem();
+sceneManager.scene.add(homeBase.group, sites.group, ships.group, solarSystem.group);
 sceneManager.onUpdate((dt) => {
   homeBase.update(dt);
   sites.update(dt);
   ships.update(dt);
+  solarSystem.update(dt);
 });
 sceneManager.start();
 
