@@ -1,13 +1,14 @@
-TF_DIR := infra/terraform
 BACKEND_DIR := backend
 FRONTEND_DIR := frontend
 
 LOCAL_PG_CONTAINER := space-colony-pg-dev
 LOCAL_PG_PORT := 55432
 
+# Defaults for seed-prod — only used if not passed on the command line.
+PGPORT ?= 5432
+
 .PHONY: help \
-	tf-init tf-plan tf-apply tf-output tf-destroy \
-	migrate init \
+	seed-prod \
 	install install-backend install-frontend \
 	local-db local-db-down local-migrate local-reset \
 	dev-backend dev-frontend
@@ -15,14 +16,10 @@ LOCAL_PG_PORT := 55432
 help:
 	@echo "Aiven demo — common tasks:"
 	@echo ""
-	@echo "  Real Aiven infra (needs TF_VAR_aiven_api_token and TF_VAR_aiven_project):"
-	@echo "    make tf-init      terraform init"
-	@echo "    make tf-plan      terraform plan"
-	@echo "    make tf-apply     terraform apply"
-	@echo "    make tf-output    print all terraform outputs (secrets included)"
-	@echo "    make migrate      apply db/init.sql + db/seed.sql to the real Aiven PG service"
-	@echo "    make init         tf-init + tf-apply + migrate, in one shot"
-	@echo "    make tf-destroy   tear down the Aiven PG service"
+	@echo "  Against a real Aiven for PostgreSQL service (created manually in the"
+	@echo "  Aiven console or via Aiven Runtime's own service composer — no Terraform):"
+	@echo "    make seed-prod PGHOST=... PGUSER=... PGPASSWORD=... PGDATABASE=... [PGPORT=5432]"
+	@echo "                        apply db/init.sql + db/seed.sql to that service"
 	@echo ""
 	@echo "  Local development (no Aiven account needed):"
 	@echo "    make install        npm install for backend + frontend"
@@ -33,38 +30,20 @@ help:
 	@echo "    make dev-frontend   run the Vite dev server"
 	@echo "    make local-db-down  stop and remove the local Postgres container"
 
-# ---- Real Aiven infra -------------------------------------------------
+# ---- Real Aiven for PostgreSQL service ----------------------------------
 
-tf-init:
-	terraform -chdir=$(TF_DIR) init
-
-tf-plan:
-	terraform -chdir=$(TF_DIR) plan
-
-tf-apply:
-	terraform -chdir=$(TF_DIR) apply
-
-tf-output:
-	terraform -chdir=$(TF_DIR) output
-
-tf-destroy:
-	terraform -chdir=$(TF_DIR) destroy
-
-# Runs as the service admin (avnadmin), not app_runtime — db/init.sql grants
-# app_runtime its runtime privileges once the tables exist, and only the
-# admin user can create objects in schema public on Postgres 15+.
-migrate:
+# Run as the service admin (e.g. avnadmin), not an app-specific user —
+# Postgres 15+ revokes CREATE on schema public by default, so only the
+# admin (who ends up owning the tables it creates) has rights on them
+# until db/init.sql's GRANT block hands out any further access itself.
+seed-prod:
+	@if [ -z "$(PGHOST)" ] || [ -z "$(PGUSER)" ] || [ -z "$(PGPASSWORD)" ] || [ -z "$(PGDATABASE)" ]; then \
+		echo "Usage: make seed-prod PGHOST=<host> PGUSER=<user> PGPASSWORD=<password> PGDATABASE=<database> [PGPORT=5432]"; \
+		exit 1; \
+	fi
 	cd $(BACKEND_DIR) && \
-	PGHOST=$$(terraform -chdir=../$(TF_DIR) output -raw pg_host) \
-	PGPORT=$$(terraform -chdir=../$(TF_DIR) output -raw pg_port) \
-	PGDATABASE=$$(terraform -chdir=../$(TF_DIR) output -raw pg_database) \
-	PGUSER=$$(terraform -chdir=../$(TF_DIR) output -raw pg_admin_user) \
-	PGPASSWORD=$$(terraform -chdir=../$(TF_DIR) output -raw pg_admin_password) \
+	PGHOST=$(PGHOST) PGPORT=$(PGPORT) PGUSER=$(PGUSER) PGPASSWORD=$(PGPASSWORD) PGDATABASE=$(PGDATABASE) \
 	npm run migrate
-
-init: tf-init tf-apply migrate
-	@echo "Aiven for PostgreSQL is provisioned and the schema is applied."
-	@echo "Next: deploy the backend on Aiven Runtime from the console (see backend/README.md)."
 
 # ---- Local development --------------------------------------------------
 

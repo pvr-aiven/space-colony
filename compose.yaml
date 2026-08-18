@@ -2,13 +2,13 @@
 # specify a `build` context and get built from their Dockerfile; the data
 # service specifies a standard `image` tag instead — Aiven Runtime
 # recognizes it and offers to either provision a new managed service or
-# link the existing one (space-colony-pg, provisioned by infra/terraform)
-# via the swap-to-existing icon in the console's composer view.
+# link an existing one (space-colony-pg) via the swap-to-existing icon in
+# the console's composer view. No Terraform involved either way.
 #
 # Aiven Runtime does NOT support internal networking between two app
 # containers, so frontend -> backend is wired via a public URL in an
-# env var (API_URL), not container-to-container DNS. See frontend/README
-# (or the root README's Deploying section) for the exact steps: deploy
+# env var (API_URL), not container-to-container DNS. See the root
+# README's "Deploying to Aiven" section for the exact steps: deploy
 # backend first, note its URL, set API_URL on frontend, then deploy it.
 services:
   backend:

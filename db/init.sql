@@ -121,9 +121,12 @@ CREATE INDEX IF NOT EXISTS idx_buildings_base ON buildings(base_id);
 -- This script runs as the service admin (avnadmin), which owns every table
 -- above. Postgres 15+ no longer grants CREATE on schema public by default,
 -- and table privileges never carry over to a role that isn't the owner, so
--- the app's own service user (created separately via Terraform) needs an
+-- a separately-created app-specific service user (if one exists) needs an
 -- explicit grant here — otherwise every query it runs fails with
--- "permission denied for schema public" or "for table ...".
+-- "permission denied for schema public" or "for table ...". In practice
+-- Aiven Runtime's "Connect service" hands the app the admin connection
+-- directly, so this block is currently a no-op — kept in case a scoped
+-- role is ever added back manually.
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_runtime') THEN
