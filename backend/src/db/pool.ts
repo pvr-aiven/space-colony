@@ -36,17 +36,23 @@ function connectionConfig(): PoolConfig {
 
 const config = connectionConfig();
 
-// Safe to log — no password. This is the only reliable way to see what an
-// env var actually resolved to on Aiven Runtime without console access,
-// after two rounds of guessing wrong about what "Connect service" injects.
-console.log("[db] connecting with", {
-  source: process.env.DATABASE_URL ? "DATABASE_URL" : "discrete PG* vars",
-  host: config.host,
-  port: config.port,
-  user: config.user,
-  database: config.database,
-  ssl: ssl === false ? false : "enabled (rejectUnauthorized: false)",
-  PGSSLMODE: process.env.PGSSLMODE ?? "(unset)",
-});
+// Safe to log — no password. Exported rather than logged here via plain
+// console.log: a plain console.log of an object gets pretty-printed by
+// Node across multiple lines, which doesn't match the single-line pino
+// JSON format Aiven Runtime's log viewer seems to expect/display — a
+// previous attempt at this using console.log never showed up at all.
+// server.ts logs this through Fastify's own pino logger instead, so it
+// comes out as the same JSON-per-line shape as every other log entry.
+export function connectionSummary(): Record<string, unknown> {
+  return {
+    source: process.env.DATABASE_URL ? "DATABASE_URL" : "discrete PG* vars",
+    host: config.host,
+    port: config.port,
+    user: config.user,
+    database: config.database,
+    ssl: ssl === false ? false : "enabled (rejectUnauthorized: false)",
+    PGSSLMODE: process.env.PGSSLMODE ?? "(unset)",
+  };
+}
 
 export const pool = new Pool({ ...config, ssl });

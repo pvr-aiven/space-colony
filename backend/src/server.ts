@@ -1,12 +1,14 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
-import { pool } from "./db/pool.js";
+import { pool, connectionSummary } from "./db/pool.js";
 import { registerRoutes } from "./routes/index.js";
 import { GameError } from "./lib/errors.js";
 import { getSessionAndBaseByToken } from "./db/sessions.js";
 import { getFullState } from "./lib/state.js";
 
 const app = Fastify({ logger: true });
+
+app.log.info(connectionSummary(), "db connection config");
 
 // Fastify binds each route to whatever error handler is active at the
 // moment the route is registered — it does not resolve it dynamically at
