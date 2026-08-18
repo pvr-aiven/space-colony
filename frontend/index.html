@@ -12,6 +12,10 @@
   </head>
   <body>
     <div id="app"></div>
+    <!-- Overwritten at container startup by docker-entrypoint.sh from the
+         API_URL env var; the public/env.js copy here is just the local-dev
+         default (empty, so client.ts falls back to a relative path). -->
+    <script src="/env.js"></script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

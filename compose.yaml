@@ -1,10 +1,15 @@
-# Manifest for Aiven Runtime: orchestrates the three services this demo
-# needs. Application services (backend, frontend) specify a `build` context
-# and get built from their Dockerfile; the data service specifies a standard
-# `image` tag instead — Aiven Runtime recognizes it and offers to either
-# provision a new managed service or link the existing one (space-colony-pg,
-# provisioned by infra/terraform) via the swap-to-existing icon in the
-# console's composer view before deploying.
+# Manifest for Aiven Runtime. Application services (backend, frontend)
+# specify a `build` context and get built from their Dockerfile; the data
+# service specifies a standard `image` tag instead — Aiven Runtime
+# recognizes it and offers to either provision a new managed service or
+# link the existing one (space-colony-pg, provisioned by infra/terraform)
+# via the swap-to-existing icon in the console's composer view.
+#
+# Aiven Runtime does NOT support internal networking between two app
+# containers, so frontend -> backend is wired via a public URL in an
+# env var (API_URL), not container-to-container DNS. See frontend/README
+# (or the root README's Deploying section) for the exact steps: deploy
+# backend first, note its URL, set API_URL on frontend, then deploy it.
 services:
   backend:
     build:
@@ -33,6 +38,13 @@ services:
       - "8080:8080"
     depends_on:
       - backend
+    # Read by the browser directly — this is the backend's PUBLIC URL, not
+    # an internal service name. http://localhost:3000 is only correct for
+    # this local `docker compose up` (the browser runs on the host and hits
+    # the host-mapped port); on Aiven Runtime, set this to the backend
+    # app's actual deployed URL instead.
+    environment:
+      - API_URL=http://localhost:3000
 
   # Placeholder credentials below only matter if Aiven provisions a brand
   # new service from this definition. Swap to the existing space-colony-pg
