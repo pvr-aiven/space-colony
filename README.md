@@ -35,6 +35,7 @@ db/init.sql          Schema (idempotent — CREATE TABLE IF NOT EXISTS)
 db/seed.sql          Catalog: resource/building/ship types, sites, base tiers
                       (idempotent via ON CONFLICT DO UPDATE — re-running it
                       after a balance tweak actually takes effect)
+db/SCHEMA.md         What each table is for, column by column
 compose.yaml         Aiven Runtime manifest (also runnable locally via `docker compose`)
 Makefile             Everything below, as make targets
 ```
