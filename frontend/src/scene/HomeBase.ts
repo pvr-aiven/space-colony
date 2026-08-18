@@ -15,6 +15,7 @@ function buildAtmosphere(): THREE.Mesh {
     opacity: 0.12,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
+    fog: false,
   });
   return new THREE.Mesh(geo, mat);
 }
@@ -32,6 +33,7 @@ export class HomeBase {
       roughness: 0.8,
       emissive: 0x0a2a1f,
       emissiveIntensity: 0.25,
+      fog: false,
     });
     this.planet = new THREE.Mesh(planetGeo, planetMat);
     this.atmosphere = buildAtmosphere();

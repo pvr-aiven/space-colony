@@ -10,7 +10,9 @@ export const BUILDING_COLORS: Record<string, number> = {
 };
 
 function standardMaterial(color: number, opts: Partial<THREE.MeshStandardMaterialParameters> = {}): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({ color, flatShading: true, emissive: color, emissiveIntensity: 0.2, ...opts });
+  // fog: false — buildings are gameplay elements, they should stay visible
+  // at any zoom level rather than fading into the background haze.
+  return new THREE.MeshStandardMaterial({ color, flatShading: true, emissive: color, emissiveIntensity: 0.2, fog: false, ...opts });
 }
 
 function solarArray(color: number, scale: number): THREE.Object3D {

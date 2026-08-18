@@ -75,6 +75,7 @@ export class Ships {
         flatShading: true,
         emissive: color,
         emissiveIntensity: 0.5,
+        fog: false,
       });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.userData = { shipId: ship.id };

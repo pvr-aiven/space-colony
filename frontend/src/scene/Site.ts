@@ -32,6 +32,7 @@ function buildNaturalBody(kind: string, difficulty: number, color: number): Buil
       emissive: color,
       emissiveIntensity: 0.08,
       roughness: 0.9,
+      fog: false,
     });
     return { object: new THREE.Mesh(geo, material), pulsingMaterials: [material] };
   }
@@ -43,6 +44,7 @@ function buildNaturalBody(kind: string, difficulty: number, color: number): Buil
     emissive: color,
     emissiveIntensity: 0.06,
     roughness: 1,
+    fog: false,
   });
   return { object: new THREE.Mesh(geo, material), pulsingMaterials: [material] };
 }
@@ -59,6 +61,7 @@ function buildDerelict(difficulty: number, color: number): BuiltSite {
     flatShading: true,
     roughness: 0.85,
     metalness: 0.3,
+    fog: false,
   });
 
   const hull = new THREE.Mesh(new THREE.BoxGeometry(scale * 1.6, scale * 0.6, scale * 0.6), hullMaterial);
@@ -77,7 +80,7 @@ function buildDerelict(difficulty: number, color: number): BuiltSite {
     group.add(greeble);
   }
 
-  const beaconMaterial = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.4 });
+  const beaconMaterial = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.4, fog: false });
   const beaconStrip = new THREE.Mesh(new THREE.BoxGeometry(scale * 1.1, scale * 0.08, scale * 0.08), beaconMaterial);
   beaconStrip.position.y = scale * 0.38;
   group.add(beaconStrip);
