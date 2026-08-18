@@ -34,4 +34,19 @@ function connectionConfig(): PoolConfig {
   };
 }
 
-export const pool = new Pool({ ...connectionConfig(), ssl });
+const config = connectionConfig();
+
+// Safe to log — no password. This is the only reliable way to see what an
+// env var actually resolved to on Aiven Runtime without console access,
+// after two rounds of guessing wrong about what "Connect service" injects.
+console.log("[db] connecting with", {
+  source: process.env.DATABASE_URL ? "DATABASE_URL" : "discrete PG* vars",
+  host: config.host,
+  port: config.port,
+  user: config.user,
+  database: config.database,
+  ssl: ssl === false ? false : "enabled (rejectUnauthorized: false)",
+  PGSSLMODE: process.env.PGSSLMODE ?? "(unset)",
+});
+
+export const pool = new Pool({ ...config, ssl });
