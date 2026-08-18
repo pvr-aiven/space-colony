@@ -10,14 +10,19 @@ import { Pool, type PoolConfig } from "pg";
 // fields, so this ssl object is the only ssl signal pg ever sees.
 const ssl = process.env.PGSSLMODE === "disable" ? false : { rejectUnauthorized: false };
 
-// Aiven Runtime's docs describe two different shapes for what a "Connect
-// service" action injects depending on the page — either a single
-// DATABASE_URL connection string, or discrete PGHOST/PGPORT/PGUSER/
-// PGPASSWORD/PGDATABASE vars. Support both, whichever is actually present.
+// Aiven Runtime's "Connect service" injects a DATABASE_URL pointing at the
+// service's default admin connection (avnadmin@defaultdb), not at our
+// app_runtime/space_colony pair. A discrete PG* var manually added on top
+// (e.g. PGDATABASE=space_colony) is meant to override just that one field
+// — so DATABASE_URL is only ever the fallback *base*, field by field, never
+// an all-or-nothing choice. Silently ignoring a manually-set PGDATABASE
+// whenever DATABASE_URL also happened to be present was the actual bug
+// behind "always connects to defaultdb no matter what I set".
 function connectionConfig(): PoolConfig {
+  let fromUrl: Partial<PoolConfig> = {};
   if (process.env.DATABASE_URL) {
     const url = new URL(process.env.DATABASE_URL);
-    return {
+    fromUrl = {
       host: url.hostname,
       port: url.port ? Number(url.port) : 5432,
       user: decodeURIComponent(url.username),
@@ -25,27 +30,28 @@ function connectionConfig(): PoolConfig {
       database: url.pathname.replace(/^\//, ""),
     };
   }
+
   return {
-    host: process.env.PGHOST,
-    port: process.env.PGPORT ? Number(process.env.PGPORT) : 5432,
-    user: process.env.PGUSER,
-    password: process.env.PGPASSWORD,
-    database: process.env.PGDATABASE,
+    host: process.env.PGHOST ?? fromUrl.host,
+    port: process.env.PGPORT ? Number(process.env.PGPORT) : fromUrl.port,
+    user: process.env.PGUSER ?? fromUrl.user,
+    password: process.env.PGPASSWORD ?? fromUrl.password,
+    database: process.env.PGDATABASE ?? fromUrl.database,
   };
 }
 
 const config = connectionConfig();
 
-// Safe to log — no password. Exported rather than logged here via plain
-// console.log: a plain console.log of an object gets pretty-printed by
-// Node across multiple lines, which doesn't match the single-line pino
-// JSON format Aiven Runtime's log viewer seems to expect/display — a
-// previous attempt at this using console.log never showed up at all.
-// server.ts logs this through Fastify's own pino logger instead, so it
-// comes out as the same JSON-per-line shape as every other log entry.
+// Safe to log — no password. Logged through Fastify's pino instance in
+// server.ts (not plain console.log — that never showed up in Aiven
+// Runtime's log viewer, which expects the same single-line JSON shape
+// every other log entry has there).
 export function connectionSummary(): Record<string, unknown> {
   return {
-    source: process.env.DATABASE_URL ? "DATABASE_URL" : "discrete PG* vars",
+    hadDatabaseUrl: Boolean(process.env.DATABASE_URL),
+    overriddenFields: ["PGHOST", "PGPORT", "PGUSER", "PGPASSWORD", "PGDATABASE"].filter(
+      (k) => process.env[k] !== undefined,
+    ),
     host: config.host,
     port: config.port,
     user: config.user,
