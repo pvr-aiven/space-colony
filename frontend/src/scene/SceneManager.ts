@@ -43,7 +43,7 @@ export class SceneManager {
 
   constructor(container: HTMLElement) {
     this.scene.background = new THREE.Color(0x05060f);
-    this.scene.fog = new THREE.FogExp2(0x0a0e1c, 0.018);
+    this.scene.fog = new THREE.FogExp2(0x0a0e1c, 0.012);
 
     this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 500);
     this.camera.position.set(0, 14, 26);
@@ -55,17 +55,17 @@ export class SceneManager {
     // ACES tone mapping + a touch of extra exposure gives the flat-shaded
     // low-poly look more contrast/punch without needing post-processing passes.
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.15;
+    this.renderer.toneMappingExposure = 1.4;
     container.appendChild(this.renderer.domElement);
 
-    const ambient = new THREE.AmbientLight(0x2a3a66, 1.1);
+    const ambient = new THREE.AmbientLight(0x3f5588, 1.9);
     this.scene.add(ambient);
 
-    const sun = new THREE.DirectionalLight(0xffd9a0, 1.8);
+    const sun = new THREE.DirectionalLight(0xffd9a0, 2.6);
     sun.position.set(20, 30, 10);
     this.scene.add(sun);
 
-    const rim = new THREE.PointLight(0x3fa9ff, 2.2, 70);
+    const rim = new THREE.PointLight(0x3fa9ff, 2.6, 90);
     rim.position.set(-15, 8, -10);
     this.scene.add(rim);
 

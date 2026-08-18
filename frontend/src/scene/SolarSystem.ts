@@ -16,6 +16,7 @@ interface PlanetSpec {
   orbitRadius: number;
   speed: number;
   map: THREE.Texture;
+  emissive: number;
 }
 
 // Purely decorative backdrop — a central sun (also a real light source) and
@@ -40,7 +41,7 @@ export class SolarSystem {
     const coronaMat = new THREE.MeshBasicMaterial({
       color: 0xffe9a8,
       transparent: true,
-      opacity: 0.25,
+      opacity: 0.3,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       fog: false,
@@ -49,24 +50,32 @@ export class SolarSystem {
     this.corona.position.copy(SUN_POSITION);
     this.group.add(this.corona);
 
-    // A real light, not just a bright mesh — this is what "un peu plus
-    // éclairer la scène" actually needs. Low decay + generous range keeps
-    // it reaching the home base despite the sun sitting ~110 units out.
-    const sunLight = new THREE.PointLight(0xfff2c0, 6, 500, 1);
+    // A real light, not just a bright mesh. decay: 1 (softer than the
+    // physically-correct inverse-square) keeps it reaching the home base
+    // despite the sun sitting ~110 units out.
+    const sunLight = new THREE.PointLight(0xfff2c0, 30, 600, 1);
     sunLight.position.copy(SUN_POSITION);
     this.group.add(sunLight);
 
     const specs: PlanetSpec[] = [
-      { radius: 3.2, orbitRadius: 22, speed: 0.05, map: planetTexture("#b5651d", "#7a3f10") },
-      { radius: 4.4, orbitRadius: 33, speed: 0.035, map: moonTexture("#4a5a72") },
-      { radius: 6.2, orbitRadius: 48, speed: 0.02, map: gasGiantTexture("#d8a86a", "#8a5a2e") },
-      { radius: 2.6, orbitRadius: 60, speed: 0.015, map: moonTexture("#8ea9c1") },
-      { radius: 1.8, orbitRadius: 14, speed: 0.09, map: asteroidTexture("#9a8a76") },
+      { radius: 3.2, orbitRadius: 22, speed: 0.05, map: planetTexture("#b5651d", "#7a3f10"), emissive: 0x5a2c08 },
+      { radius: 4.4, orbitRadius: 33, speed: 0.035, map: moonTexture("#4a5a72"), emissive: 0x1c2436 },
+      { radius: 6.2, orbitRadius: 48, speed: 0.02, map: gasGiantTexture("#d8a86a", "#8a5a2e"), emissive: 0x503818 },
+      { radius: 2.6, orbitRadius: 60, speed: 0.015, map: moonTexture("#8ea9c1"), emissive: 0x2c3c4c },
+      { radius: 1.8, orbitRadius: 14, speed: 0.09, map: asteroidTexture("#9a8a76"), emissive: 0x3c342a },
     ];
 
     for (const spec of specs) {
       const geo = new THREE.SphereGeometry(spec.radius, 24, 16);
-      const mat = new THREE.MeshStandardMaterial({ map: spec.map, roughness: 0.85 });
+      // fog: false — these are meant to read as fixed cosmic backdrop, not
+      // fade into atmospheric haze the way nearby explorable sites do.
+      const mat = new THREE.MeshStandardMaterial({
+        map: spec.map,
+        roughness: 0.85,
+        emissive: spec.emissive,
+        emissiveIntensity: 0.5,
+        fog: false,
+      });
       const mesh = new THREE.Mesh(geo, mat);
       this.group.add(mesh);
       this.planets.push({
