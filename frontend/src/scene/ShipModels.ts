@@ -37,10 +37,14 @@ function normalize(model: THREE.Object3D, shipCode: string): THREE.Object3D {
   model.scale.setScalar(scale);
   model.position.multiplyScalar(scale);
 
-  // No rotation applied: measuring these models shows Y as the flattest axis
-  // (~0.8) and Z as the longest (~2.1-2.6), i.e. they're already Y-up with
-  // the nose along -Z — the same convention THREE.Object3D.lookAt() aims,
-  // so Ship.ts can point them at a target with no correction.
+  // These models are Y-up with the nose along -Z (their bounding boxes show Y
+  // as the flattest axis and Z as the longest, and the tapered end sits on
+  // -Z). But THREE.Object3D.lookAt() aims an object's *+Z* at the target —
+  // it's Camera.lookAt() that uses -Z — so a -Z-nosed model aimed with
+  // lookAt() flies tail-first. Yaw 180° here so the nose becomes +Z and
+  // lookAt() points it the right way round.
+  model.rotation.y = Math.PI;
+
   wrapper.add(model);
   return wrapper;
 }

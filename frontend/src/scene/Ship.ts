@@ -16,9 +16,10 @@ const IDLE_ORBIT_RADIUS = 8;
 // failed to load) — keeps the game playable rather than showing nothing.
 function buildFallbackShip(color: number): THREE.Object3D {
   const geo = new THREE.ConeGeometry(0.35, 1, 6);
-  // Cones point +Y by default; tip it to point -Z so it matches the imported
-  // models' orientation and both can be aimed with a plain lookAt().
-  geo.rotateX(-Math.PI / 2);
+  // Cones point +Y by default; tip it to +Z, which is the axis
+  // Object3D.lookAt() aims at the target (and what ShipModels rotates the
+  // imported models to), so both can be aimed with a plain lookAt().
+  geo.rotateX(Math.PI / 2);
   const mat = new THREE.MeshStandardMaterial({
     color,
     flatShading: true,
@@ -55,14 +56,20 @@ export class Ships {
         const eta = new Date(ship.eta_at).getTime();
         const progress = THREE.MathUtils.clamp((Date.now() - departed) / (eta - departed), 0, 1);
 
-        const previous = object.position.clone();
         object.position.lerpVectors(HOME_POSITION, target, progress);
         object.position.y += Math.sin(progress * Math.PI) * 1.5; // small arc, purely cosmetic
 
-        const heading = object.position.clone().sub(previous);
+        // Heading comes from the straight-line home->site vector, not from the
+        // frame-to-frame position delta. That delta is far too small to rely
+        // on: a ~5-unit trip over a 200s ETA moves ~0.0004 units per frame, so
+        // any "is it moving enough to re-aim?" threshold either skips the
+        // lookAt entirely (leaving the ship pointing whatever way its idle
+        // orbit left it — ships flying backwards) or is so low it's just noise.
+        // This is exact and frame-rate independent.
+        const heading = target.clone().sub(HOME_POSITION);
         if (heading.lengthSq() > 1e-6) {
-          // Both the imported models and the fallback cone are nose-along -Z,
-          // which is exactly what lookAt() aims — no correction needed.
+          // Nose is +Z on both the imported models and the fallback cone,
+          // matching what Object3D.lookAt() aims — no correction needed.
           object.lookAt(object.position.clone().add(heading));
         }
       } else {
@@ -98,7 +105,7 @@ export class Ships {
       // Tinted engine light per ship type — keeps the fleet colour-coded the
       // way the DOM panels are, even though the models themselves are grey.
       const engineGlow = new THREE.PointLight(color, 1.2, 5);
-      engineGlow.position.set(0, 0, 0.6); // behind the ship: +Z is aft, nose is -Z
+      engineGlow.position.set(0, 0, -0.6); // behind the ship: nose is +Z, so aft is -Z
       object.add(engineGlow);
 
       this.group.add(object);
