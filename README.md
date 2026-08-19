@@ -10,6 +10,14 @@ rarer resources and `unlock_tokens` → spend them to upgrade the base tier →
 unlock bigger buildings and ships. Everything is persisted in Postgres, so
 closing the tab and reopening it resumes the same game.
 
+The late game opens up deep space: a **sensor array** reveals three distant
+worlds, a tier-3 **quantum gate** makes them reachable, and ships travel
+there by quantum jump — charging at base, tearing out through a warp tube,
+and reappearing across the system in a flash. Their hauls are large enough
+that a ship's cargo capacity decides whether the trip paid off. See
+[db/SCHEMA.md](db/SCHEMA.md#the-progression-chain) for how that chain is
+wired.
+
 ## Stack
 
 | Layer | Choice |
@@ -177,10 +185,14 @@ required). Only three of the pack's 153 models are vendored, in
 Everything else in the scene — the home planet, buildings, explorable
 sites, derelicts, the sun and background planets — is generated
 procedurally in code (`frontend/src/scene/`), with canvas-drawn textures
-rather than image assets. Adding GLTF support cost ~93 KB of JS
-(three.js's `GLTFLoader`) on top of the ~66 KB of models, so if the
-bundle size ever matters more than the ship detail, dropping back to
-`buildFallbackShip()` in `Ship.ts` is a one-line change.
+rather than image assets. The quantum jump effects are hand-written GLSL
+in `scene/QuantumFx.ts`; no shader library involved.
+
+Bundle cost of the visual work, if it ever needs trading back: ~93 KB of
+JS for three.js's `GLTFLoader` plus ~66 KB of models (revert by using
+`buildFallbackShip()` in `Ship.ts`), and ~25 KB for the post-processing
+passes (revert by rendering `renderer.render(scene, camera)` instead of
+`composer.render()` in `SceneManager`). Measured 120fps with everything on.
 
 ## Environment variables reference
 

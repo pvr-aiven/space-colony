@@ -137,13 +137,43 @@ Indexes: `idx_expeditions_base (base_id, departed_at DESC)`,
 `idx_ships_base (base_id)`, `idx_buildings_base (base_id)` — all support
 the "list everything for this base" queries `GET /state` does on every call.
 
+## The progression chain
+
+There's no tech-tree table; progression is emergent from four columns spread
+across the catalog tables, which between them produce one dependency chain:
+
+```
+tier 2 ──> sensor_array ──> refinery ──> tier 3 ──> quantum_gate
+             │                 │                        │
+             │                 └─ produces              └─ travel_requires:
+             │                    rare_isotopes,           unlocks the three
+             │                    which the gate           deep_planet sites
+             │                    is priced in
+             └─ reveal_requires: makes the deep_planet sites visible
+                (but not yet reachable)
+```
+
+The columns doing the work:
+
+| Column | Table | Effect |
+|---|---|---|
+| `min_base_tier` | `building_types`, `ship_types` | Hard tier floor |
+| `unlocks_building_code` | `building_types` | Enforced build-order prerequisite |
+| `reveal_requires` | `sites` | Whether a site is visible at all |
+| `travel_requires` | `sites` | Whether a site can be dispatched to |
+| `cargo_capacity` | `ship_types` | Caps the haul, so deep sites need a big ship |
+
+The reveal/travel split is the deliberate part: with a sensor array you can
+*see* three rich deep-space worlds and read their yields, but dispatching is
+refused until the quantum gate is up. And once it is, `cargo_capacity` decides
+whether the trip was worth it — measured on the same site, a scout brings home
+39 and a heavy cruiser 151.
+
 ## Catalog tables
 
 ### `base_tiers`
 
-The entire progression tree lives in three places: this table, and the
-`min_base_tier` column on `building_types`/`ship_types` below. There is no
-separate tech-tree table — deliberately, to keep this small.
+Tier thresholds only; the wider progression picture is above.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -151,8 +181,9 @@ separate tech-tree table — deliberately, to keep this small.
 | `build_slots` | int | What `bases.build_slots` becomes at this tier |
 | `upgrade_cost` | jsonb, nullable | `{resource_code: amount}` to reach this tier from the previous one. `NULL` for tier 1 (the starting tier — nothing to buy) |
 
-Seed data: tier 1 (4 slots, free/starting), tier 2 (6 slots, costs 5
-`unlock_tokens`).
+Seed data: tier 1 (4 slots, free/starting), tier 2 (6 slots, 5
+`unlock_tokens`), tier 3 (8 slots, 15 `unlock_tokens` + 40
+`rare_isotopes`).
 
 ### `resource_types`
 
@@ -166,14 +197,14 @@ Seed data: tier 1 (4 slots, free/starting), tier 2 (6 slots, costs 5
 
 | Column | Type | Notes |
 |---|---|---|
-| `code` | text PK | `solar_array`, `mining_rig`, `ice_extractor`, `shipyard`, `sensor_array`, `refinery` |
+| `code` | text PK | `solar_array`, `mining_rig`, `ice_extractor`, `shipyard`, `sensor_array`, `refinery`, `quantum_gate` |
 | `display_name` | text | |
 | `max_level` | int | |
-| `min_base_tier` | int | `sensor_array`/`refinery` require tier 2; the rest are tier 1 |
+| `min_base_tier` | int | `sensor_array`/`refinery` require tier 2, `quantum_gate` tier 3; the rest are tier 1 |
 | `base_cost` | jsonb | `{resource_code: amount}` to build at level 1 |
 | `cost_growth_factor` | numeric | Cost to reach level *N* = `base_cost × cost_growth_factor^(N-1)` |
-| `production` | jsonb, nullable | `{"resource": code, "rate_per_hour": number}`, or `NULL` for buildings with no passive output (`shipyard`, `sensor_array`) |
-| `unlocks_building_code` | text → `building_types.code`, nullable | Descriptive only right now — `sensor_array` points at `refinery`, but nothing in the backend actually enforces "build the unlocker first"; `min_base_tier` is what's actually checked |
+| `production` | jsonb, nullable | `{"resource": code, "rate_per_hour": number}`, or `NULL` for buildings with no passive output (`shipyard`, `sensor_array`, `quantum_gate`) |
+| `unlocks_building_code` | text → `building_types.code`, nullable | A real prerequisite, enforced in `createBuilding`: to build X, every type declaring `unlocks_building_code = X` must already be built and active. Gives the chain `sensor_array` → `refinery` → `quantum_gate` |
 
 The `rate_per_hour` numbers are tuned for a live demo (visible movement on
 an 8-second poll), not a realistic idle-game economy — treat the "per
@@ -187,27 +218,30 @@ hour" label as fictional.
 | `display_name` | text | |
 | `min_base_tier` | int | `heavy_cruiser` requires tier 2 |
 | `base_cost` | jsonb | `{resource_code: amount}` |
-| `cargo_capacity` | int | Not currently used by any game logic (no cargo limits enforced yet) |
+| `cargo_capacity` | int | Hard cap on the **total** resources one expedition can bring home (40 / 150 / 400). Over-capacity hauls are scaled down proportionally, preserving the site's yield ratios |
 | `speed_factor` | numeric | Effective travel time = `sites.travel_time_minutes / speed_factor` — higher is faster |
 
 ### `sites`
 
-The fixed, never-changing set of explorable locations. No per-session
-discovery state — every site is visible and dispatchable from the start;
-`difficulty` is what gates how risky/rewarding it is, not whether it's
-known.
+The fixed set of explorable locations. There's no per-session discovery
+state: visibility and reachability are derived from which buildings the base
+has (see `reveal_requires` / `travel_requires` below), not stored per player.
+Local sites are ungated; the three `deep_planet` sites are revealed by a
+sensor array and reachable only with a quantum gate.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uuid PK | |
 | `code` | text, unique | Stable slug independent of the uuid |
 | `display_name` | text | |
-| `kind` | text | `asteroid` \| `planet` \| `derelict` — also drives which 3D model the frontend builds |
-| `difficulty` | int | 1-4 in the seed data; scales the visual size and (loosely) the risk/reward |
+| `kind` | text | `asteroid` \| `planet` \| `derelict` \| `deep_planet` — also drives which 3D model the frontend builds, and whether travel is a linear flight or a quantum jump |
+| `difficulty` | int | 1-7 in the seed data; scales the visual size and (loosely) the risk/reward |
 | `risk_pct` | numeric | Chance of a `failed` (empty-handed) outcome on resolution |
 | `travel_time_minutes` | int | Base travel time before a ship's `speed_factor` is applied |
 | `yield_table` | jsonb | `{resource_code: [min, max]}` — resolution rolls a random amount per resource in range (halved on a `partial` outcome, which triggers on a second, narrower risk band past `risk_pct`) |
-| `position` | jsonb | `{x, y, z}` fixed 3D coordinates (scaled by `0.4` in the frontend) for where the site renders relative to the home base |
+| `position` | jsonb | `{x, y, z}` scene-space coordinates, used directly by the frontend with no scaling. Local sites sit within ~12 units of the home base; `deep_planet` sites are 40-50 units out |
+| `reveal_requires` | text → `building_types.code`, nullable | Building needed for the site to appear at all; `NULL` = always visible |
+| `travel_requires` | text → `building_types.code`, nullable | Building needed to dispatch there; `NULL` = no requirement. Separate from reveal on purpose — seeing a target you can't yet reach is what makes the gate worth building |
 
 ## JSON column shapes, summarized
 
