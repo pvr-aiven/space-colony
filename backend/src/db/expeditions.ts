@@ -28,6 +28,23 @@ function rollYield(yieldTable: YieldTable, multiplier: number): Cost {
   return gains;
 }
 
+// A ship can only carry so much home. Scaled down proportionally rather than
+// truncating whichever resources happen to be iterated last, so an
+// over-capacity haul keeps the site's yield *ratios* intact — it just brings
+// back less of everything.
+function applyCargoLimit(gains: Cost, cargoCapacity: number): { limited: Cost; overflowed: boolean } {
+  const total = Object.values(gains).reduce((sum, n) => sum + n, 0);
+  if (total <= cargoCapacity) return { limited: gains, overflowed: false };
+
+  const ratio = cargoCapacity / total;
+  const limited: Cost = {};
+  for (const [code, amount] of Object.entries(gains)) {
+    const scaled = Math.floor(amount * ratio);
+    if (scaled > 0) limited[code] = scaled;
+  }
+  return { limited, overflowed: true };
+}
+
 async function resolveOneExpedition(
   client: PoolClient,
   expedition: { id: string; ship_id: string; site_id: string; base_id: string },
@@ -53,17 +70,27 @@ async function resolveOneExpedition(
     multiplier = 1;
   }
 
-  const gains = multiplier > 0 ? rollYield(site.yield_table, multiplier) : {};
+  const { rows: shipRows } = await client.query<{ cargo_capacity: number }>(
+    `SELECT st.cargo_capacity
+     FROM ships s JOIN ship_types st ON st.code = s.ship_code
+     WHERE s.id = $1`,
+    [expedition.ship_id],
+  );
+  const cargoCapacity = shipRows[0]?.cargo_capacity ?? Number.MAX_SAFE_INTEGER;
+
+  const rolled = multiplier > 0 ? rollYield(site.yield_table, multiplier) : {};
+  const { limited: gains, overflowed } = applyCargoLimit(rolled, cargoCapacity);
   if (Object.keys(gains).length > 0) {
     await creditResources(client, expedition.base_id, gains);
   }
 
+  const cargoNote = overflowed ? ` Cargo hold filled at ${cargoCapacity} — the rest was left behind.` : "";
   const logMessage =
     outcome === "failed"
       ? `Expedition to ${site.display_name} returned empty-handed.`
       : outcome === "partial"
-        ? `Expedition to ${site.display_name} recovered a partial haul.`
-        : `Expedition to ${site.display_name} was a success.`;
+        ? `Expedition to ${site.display_name} recovered a partial haul.${cargoNote}`
+        : `Expedition to ${site.display_name} was a success.${cargoNote}`;
 
   await client.query(
     `UPDATE expeditions SET resolved_at = now(), outcome = $1, resources_gained = $2, log_message = $3 WHERE id = $4`,

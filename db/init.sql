@@ -76,7 +76,14 @@ CREATE TABLE IF NOT EXISTS ship_types (
     speed_factor    numeric NOT NULL DEFAULT 1.0
 );
 
--- ============ explorable sites (fixed set of 3-5, seeded at deploy) ============
+-- ============ explorable sites (fixed set, seeded at deploy) ============
+-- `position` is in scene-space units, used directly by the frontend with no
+-- further scaling.
+--
+-- reveal_requires / travel_requires are the two halves of the progression
+-- gate on deep-space sites: a site you can *see* but not yet *reach* is the
+-- point (build the sensor array and distant planets appear; build the quantum
+-- gate and you can actually go). NULL on either means "no requirement".
 CREATE TABLE IF NOT EXISTS sites (
     id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     code                text NOT NULL UNIQUE,
@@ -86,8 +93,16 @@ CREATE TABLE IF NOT EXISTS sites (
     risk_pct            numeric NOT NULL DEFAULT 0.1,
     travel_time_minutes int NOT NULL DEFAULT 5,
     yield_table         jsonb NOT NULL,
-    position            jsonb NOT NULL
+    position            jsonb NOT NULL,
+    reveal_requires     text REFERENCES building_types(code),
+    travel_requires     text REFERENCES building_types(code)
 );
+
+-- CREATE TABLE IF NOT EXISTS silently does nothing when the table already
+-- exists, so columns added after the first deployment need explicit ALTERs
+-- for `make seed-prod` to keep working against a live database.
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS reveal_requires text REFERENCES building_types(code);
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS travel_requires text REFERENCES building_types(code);
 
 CREATE TABLE IF NOT EXISTS ships (
     id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),

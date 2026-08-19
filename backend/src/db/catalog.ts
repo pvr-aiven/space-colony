@@ -12,7 +12,8 @@ export async function getCatalog() {
        FROM ship_types ORDER BY min_base_tier, code`,
     ),
     pool.query(
-      `SELECT id, code, display_name, kind, difficulty, risk_pct, travel_time_minutes, yield_table, position
+      `SELECT id, code, display_name, kind, difficulty, risk_pct, travel_time_minutes, yield_table, position,
+              reveal_requires, travel_requires
        FROM sites ORDER BY difficulty, code`,
     ),
     pool.query(`SELECT tier, build_slots, upgrade_cost FROM base_tiers ORDER BY tier`),

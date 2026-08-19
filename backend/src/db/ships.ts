@@ -91,12 +91,34 @@ export async function dispatchShip(baseId: string, shipId: string, siteId: strin
       throw new GameError("SHIP_NOT_IDLE", "Ship must be idle at base to dispatch");
     }
 
-    const { rows: siteRows } = await client.query<{ id: string; travel_time_minutes: number }>(
-      `SELECT id, travel_time_minutes FROM sites WHERE id = $1`,
+    const { rows: siteRows } = await client.query<{
+      id: string;
+      display_name: string;
+      travel_time_minutes: number;
+      travel_requires: string | null;
+    }>(
+      `SELECT id, display_name, travel_time_minutes, travel_requires FROM sites WHERE id = $1`,
       [siteId],
     );
     const site = siteRows[0];
     if (!site) throw new NotFoundError("Unknown site");
+
+    // Deep-space sites need an enabling building (the quantum gate). The
+    // frontend greys these out already, but that's presentation — this is
+    // the check that actually matters.
+    if (site.travel_requires) {
+      const { rows: enabling } = await client.query(
+        `SELECT 1 FROM buildings
+         WHERE base_id = $1 AND building_code = $2 AND status = 'active'`,
+        [baseId, site.travel_requires],
+      );
+      if (enabling.length === 0) {
+        throw new GameError(
+          "MISSING_REQUIRED_BUILDING",
+          `Reaching ${site.display_name} requires an active ${site.travel_requires.replace(/_/g, " ")}`,
+        );
+      }
+    }
 
     const effectiveMinutes = site.travel_time_minutes / Number(ship.speed_factor);
 
