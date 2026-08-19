@@ -30,7 +30,7 @@ INSERT INTO building_types (code, display_name, max_level, min_base_tier, base_c
     ('ice_extractor', 'Ice Extractor',  3, 1, '{"metal": 30, "energy": 10}',       1.5, '{"resource": "ice", "rate_per_hour": 1080}',    NULL),
     ('shipyard',      'Shipyard',       2, 1, '{"metal": 80, "ice": 20}',          1.6, NULL,                                            NULL),
     ('sensor_array',  'Sensor Array',   2, 2, '{"metal": 60, "energy": 40}',       1.6, NULL,                                            'refinery'),
-    ('refinery',      'Refinery',       3, 2, '{"metal": 120, "ice": 40}',         1.7, '{"resource": "rare_isotopes", "rate_per_hour": 360}', NULL),
+    ('refinery',      'Refinery',       3, 2, '{"metal": 120, "ice": 40}',         1.7, '{"resource": "rare_isotopes", "rate_per_hour": 360}', 'quantum_gate'),
     -- Endgame unlock: gates travel to the deep-space sites that sensor_array
     -- reveals. Deliberately expensive in rare_isotopes, which only the
     -- refinery produces passively, so tier 2 has to be built out first.

@@ -54,12 +54,18 @@ export interface Site {
   id: string;
   code: string;
   display_name: string;
+  /** `asteroid` | `planet` | `derelict` | `deep_planet` */
   kind: string;
   difficulty: number;
   risk_pct: string;
   travel_time_minutes: number;
   yield_table: Record<string, [number, number]>;
+  /** Scene-space coordinates — used directly, no scaling applied. */
   position: { x: number; y: number; z: number };
+  /** Building required for the site to be visible at all; null = always visible. */
+  reveal_requires: string | null;
+  /** Building required to dispatch there; null = no requirement. */
+  travel_requires: string | null;
 }
 
 export interface BuildingType {

@@ -105,6 +105,28 @@ export async function createBuilding(
       throw new GameError("NO_BUILD_SLOTS", "No free build slots on this base");
     }
 
+    // building_types.unlocks_building_code is a real prerequisite, not just
+    // documentation: if some building type declares that it unlocks this one,
+    // that prerequisite has to be standing first. Without this you could climb
+    // to tier 3 and build a quantum gate having never built the sensor array
+    // that reveals anything to point it at.
+    const { rows: prereqRows } = await client.query<{ code: string }>(
+      `SELECT code FROM building_types WHERE unlocks_building_code = $1`,
+      [buildingCode],
+    );
+    for (const prereq of prereqRows) {
+      const { rows: built } = await client.query(
+        `SELECT 1 FROM buildings WHERE base_id = $1 AND building_code = $2 AND status = 'active'`,
+        [baseId, prereq.code],
+      );
+      if (built.length === 0) {
+        throw new GameError(
+          "MISSING_PREREQUISITE",
+          `${buildingCode.replace(/_/g, " ")} requires an active ${prereq.code.replace(/_/g, " ")}`,
+        );
+      }
+    }
+
     const cost = costForLevel(buildingType.base_cost, Number(buildingType.cost_growth_factor), 1);
     await deductResources(client, baseId, cost);
 

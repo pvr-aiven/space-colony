@@ -1,25 +1,73 @@
 import * as THREE from "three";
 import { store } from "../state/gameState";
-import { asteroidTexture, derelictPanelTexture, makeCraggyGeometry, moonTexture } from "./textures";
+import { isSiteRevealed, isSiteTravelable } from "../state/siteAccess";
+import {
+  asteroidTexture,
+  derelictPanelTexture,
+  gasGiantTexture,
+  makeCraggyGeometry,
+  moonTexture,
+  planetTexture,
+} from "./textures";
 
 const KIND_COLORS: Record<string, number> = {
   asteroid: 0xa0a0a0,
   planet: 0x4cc9f0,
   derelict: 0xf72585,
+  deep_planet: 0xb388ff,
 };
-
-const SCALE = 0.4;
 
 interface Marker {
   object: THREE.Object3D;
   pulsingMaterials: THREE.MeshStandardMaterial[];
   phase: number;
   pulseRange: [number, number];
+  siteCode: string;
 }
 
 interface BuiltSite {
   object: THREE.Object3D;
   pulsingMaterials: THREE.MeshStandardMaterial[];
+}
+
+// Deep-space sites are full planets, not rocks — rendered much larger than the
+// local sites so they read as distant worlds rather than nearby debris, with a
+// faint halo to suggest atmosphere at range.
+function buildDeepPlanet(difficulty: number, color: number, siteCode: string): BuiltSite {
+  const group = new THREE.Group();
+  const radius = 2.6 + difficulty * 0.35;
+
+  // Vary the surface by site so the three don't look like the same world.
+  const texture =
+    siteCode === "outer_ice_belt"
+      ? moonTexture("#a8c4d8")
+      : siteCode === "crimson_expanse"
+        ? planetTexture("#8c2f2f", "#5a1b1b")
+        : gasGiantTexture("#c9a86a", "#7d5a2e");
+
+  const material = new THREE.MeshStandardMaterial({
+    map: texture,
+    roughness: 0.85,
+    emissive: color,
+    emissiveIntensity: 0.12,
+    fog: false,
+  });
+  group.add(new THREE.Mesh(new THREE.SphereGeometry(radius, 32, 24), material));
+
+  const halo = new THREE.Mesh(
+    new THREE.SphereGeometry(radius * 1.12, 24, 16),
+    new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.14,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: false,
+    }),
+  );
+  group.add(halo);
+
+  return { object: group, pulsingMaterials: [material] };
 }
 
 function buildNaturalBody(kind: string, difficulty: number, color: number): BuiltSite {
@@ -97,8 +145,10 @@ function buildDerelict(difficulty: number, color: number): BuiltSite {
   return { object: group, pulsingMaterials: [beaconMaterial] };
 }
 
-function buildSite(kind: string, difficulty: number, color: number): BuiltSite {
-  return kind === "derelict" ? buildDerelict(difficulty, color) : buildNaturalBody(kind, difficulty, color);
+function buildSite(kind: string, difficulty: number, color: number, siteCode: string): BuiltSite {
+  if (kind === "deep_planet") return buildDeepPlanet(difficulty, color, siteCode);
+  if (kind === "derelict") return buildDerelict(difficulty, color);
+  return buildNaturalBody(kind, difficulty, color);
 }
 
 export class Sites {
@@ -107,8 +157,11 @@ export class Sites {
   private elapsed = 0;
 
   constructor() {
-    store.subscribe(() => this.sync());
-    this.sync();
+    store.subscribe(() => {
+      this.build();
+      this.applyVisibility();
+    });
+    this.build();
   }
 
   update(dt: number): void {
@@ -127,14 +180,17 @@ export class Sites {
     return this.markers.get(siteId)?.object;
   }
 
-  private sync(): void {
+  // Every site gets a mesh up front; reveal state only toggles visibility.
+  // Rebuilding on each state change instead would churn geometry every poll,
+  // and reveal can flip at any time (the moment a sensor array finishes).
+  private build(): void {
     const catalog = store.getCatalog();
-    if (!catalog || this.markers.size > 0) return; // sites are a fixed catalog, build once
+    if (!catalog || this.markers.size > 0) return;
 
     catalog.sites.forEach((site, i) => {
       const color = KIND_COLORS[site.kind] ?? 0xffffff;
-      const { object, pulsingMaterials } = buildSite(site.kind, site.difficulty, color);
-      object.position.set(site.position.x * SCALE, site.position.y * SCALE, site.position.z * SCALE);
+      const { object, pulsingMaterials } = buildSite(site.kind, site.difficulty, color, site.code);
+      object.position.set(site.position.x, site.position.y, site.position.z);
       object.userData = { siteId: site.id, label: site.display_name };
 
       const beacon = new THREE.PointLight(color, site.kind === "derelict" ? 0.6 : 0.3, 5);
@@ -142,7 +198,26 @@ export class Sites {
 
       this.group.add(object);
       const pulseRange: [number, number] = site.kind === "derelict" ? [0.1, 0.7] : [0.02, 0.14];
-      this.markers.set(site.id, { object, pulsingMaterials, phase: i * 1.3, pulseRange });
+      this.markers.set(site.id, { object, pulsingMaterials, phase: i * 1.3, pulseRange, siteCode: site.code });
     });
+
+    this.applyVisibility();
+  }
+
+  private applyVisibility(): void {
+    const catalog = store.getCatalog();
+    const state = store.getState();
+    if (!catalog) return;
+
+    for (const site of catalog.sites) {
+      const marker = this.markers.get(site.id);
+      if (!marker) continue;
+      const revealed = isSiteRevealed(site, state);
+      marker.object.visible = revealed;
+      // Unreachable-but-visible sites glow a little less, so "I can see it but
+      // can't go yet" reads differently from a site that's ready to dispatch to.
+      const reachable = isSiteTravelable(site, state);
+      marker.pulseRange = reachable ? (site.kind === "derelict" ? [0.1, 0.7] : [0.02, 0.14]) : [0.01, 0.05];
+    }
   }
 }

@@ -1,5 +1,6 @@
 import { store } from "../state/gameState";
 import { applyOptimisticCost, rollback } from "../state/optimistic";
+import { isSiteRevealed, travelBlockedReason } from "../state/siteAccess";
 import { ApiError, buildShip, dispatchShip } from "../api/client";
 import type { GameState } from "../types/api";
 
@@ -56,10 +57,21 @@ export class ShipPanel {
         </div>`;
     });
 
+    // Only revealed sites are offered at all; revealed-but-unreachable ones are
+    // listed disabled with the reason, so the quantum gate has a visible payoff
+    // rather than deep-space targets silently appearing later.
+    const revealedSites = catalog.sites.filter((site) => isSiteRevealed(site, state));
+
     const fleetRows = state.ships.map((ship) => {
       if (ship.status === "idle") {
-        const options = catalog.sites
-          .map((site) => `<option value="${site.id}">${site.display_name} (${site.travel_time_minutes}m)</option>`)
+        const options = revealedSites
+          .map((site) => {
+            const blocked = travelBlockedReason(site, state);
+            const label = blocked
+              ? `${site.display_name} — ${blocked}`
+              : `${site.display_name} (${site.travel_time_minutes}m)`;
+            return `<option value="${site.id}" ${blocked ? "disabled" : ""}>${label}</option>`;
+          })
           .join("");
         return `
           <div class="item" data-ship-id="${ship.id}">
