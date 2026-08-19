@@ -17,6 +17,7 @@ export class ShipPanel {
   readonly el = document.createElement("div");
   private onError: (message: string) => void;
   private tickHandle: number;
+  private pendingRender = false;
 
   constructor(onError: (message: string) => void) {
     this.el.className = "build-menu";
@@ -26,18 +27,63 @@ export class ShipPanel {
     this.onError = onError;
     store.subscribe(() => this.render());
     this.render();
-    // Re-render every second purely to tick down the ETA countdown text.
-    this.tickHandle = window.setInterval(() => this.render(), 1000);
+
+    // Only the ETA countdown changes every second, so patch that text in place.
+    // A full re-render here would replace the <select> element, and a native
+    // dropdown closes the instant its element is swapped out — which made the
+    // site picker impossible to use.
+    //
+    // This same tick also flushes any structural render deferred while the
+    // dropdown was open. Polling for that rather than listening for focusout:
+    // focusout isn't reliably dispatched for programmatic blur, and a
+    // sub-second catch-up is imperceptible either way.
+    this.tickHandle = window.setInterval(() => {
+      this.tickEtas();
+      if (this.pendingRender && !this.isInteracting()) {
+        this.pendingRender = false;
+        this.render();
+      }
+    }, 1000);
   }
 
   dispose(): void {
     window.clearInterval(this.tickHandle);
   }
 
+  // An open native select keeps the element focused, so this is the closest
+  // available signal for "the user is mid-interaction, don't rebuild the DOM".
+  private isInteracting(): boolean {
+    const active = document.activeElement;
+    return active instanceof HTMLSelectElement && this.el.contains(active);
+  }
+
+  private tickEtas(): void {
+    const state = store.getState();
+    if (!state) return;
+    for (const ship of state.ships) {
+      const node = this.el.querySelector<HTMLElement>(`[data-eta="${ship.id}"]`);
+      if (node) node.textContent = formatEta(ship.eta_at);
+    }
+  }
+
   private render(): void {
     const state = store.getState();
     const catalog = store.getCatalog();
     if (!state || !catalog) return;
+
+    if (this.isInteracting()) {
+      this.pendingRender = true;
+      return;
+    }
+
+    // Preserve each ship's chosen destination across re-renders — otherwise
+    // every poll silently reset the picker to the first option, so a slow
+    // selection could end up dispatching somewhere the player didn't pick.
+    const previousSelection = new Map<string, string>();
+    this.el.querySelectorAll<HTMLElement>("[data-ship-id]").forEach((row) => {
+      const select = row.querySelector<HTMLSelectElement>(".site-select");
+      if (select?.value) previousSelection.set(row.dataset.shipId!, select.value);
+    });
 
     const shipRows = catalog.ship_types.map((type) => {
       const tierOk = state.base.tier >= type.min_base_tier;
@@ -80,13 +126,23 @@ export class ShipPanel {
             <button data-dispatch="${ship.id}">Dispatch</button>
           </div>`;
       }
-      return `<div class="item"><div>${ship.ship_code} · en route</div><div class="cost">${formatEta(ship.eta_at)}</div></div>`;
+      return `<div class="item"><div>${ship.ship_code} · en route</div><div class="cost" data-eta="${ship.id}">${formatEta(ship.eta_at)}</div></div>`;
     });
 
     this.el.innerHTML = `
       <h3>Shipyard</h3>${shipRows.join("")}
       <h3>Fleet</h3>${fleetRows.join("") || '<div class="cost">No ships yet</div>'}
     `;
+
+    this.el.querySelectorAll<HTMLElement>("[data-ship-id]").forEach((row) => {
+      const select = row.querySelector<HTMLSelectElement>(".site-select");
+      const previous = previousSelection.get(row.dataset.shipId!);
+      // Only restore if that option still exists and is still selectable.
+      if (select && previous) {
+        const match = select.querySelector<HTMLOptionElement>(`option[value="${previous}"]`);
+        if (match && !match.disabled) select.value = previous;
+      }
+    });
 
     this.el.querySelectorAll<HTMLElement>("[data-ship-type]").forEach((row) => {
       const btn = row.querySelector("button")!;
