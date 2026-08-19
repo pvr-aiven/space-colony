@@ -36,6 +36,7 @@ db/seed.sql          Catalog: resource/building/ship types, sites, base tiers
                       (idempotent via ON CONFLICT DO UPDATE — re-running it
                       after a balance tweak actually takes effect)
 db/SCHEMA.md         What each table is for, column by column
+frontend/public/models/  Three CC0 ship models (see Credits below)
 compose.yaml         Aiven Runtime manifest (also runnable locally via `docker compose`)
 Makefile             Everything below, as make targets
 ```
@@ -159,6 +160,27 @@ collect resources, build something, build and dispatch a ship, watch an
 expedition resolve. Close the tab and reopen it — the session token lives
 in `localStorage`, and the exact same state should come back from
 Postgres. That round trip is the actual point of this demo.
+
+## Credits
+
+Ship models are from **Kenney's "Space Kit" 2.0** (https://kenney.nl),
+released under **CC0** (public domain — attribution appreciated but not
+required). Only three of the pack's 153 models are vendored, in
+`frontend/public/models/`, alongside the pack's original license file:
+
+| Ship type | Model file |
+|---|---|
+| `scout` | `craft_speederA.glb` |
+| `freighter` | `craft_cargoA.glb` |
+| `heavy_cruiser` | `craft_miner.glb` |
+
+Everything else in the scene — the home planet, buildings, explorable
+sites, derelicts, the sun and background planets — is generated
+procedurally in code (`frontend/src/scene/`), with canvas-drawn textures
+rather than image assets. Adding GLTF support cost ~93 KB of JS
+(three.js's `GLTFLoader`) on top of the ~66 KB of models, so if the
+bundle size ever matters more than the ship detail, dropping back to
+`buildFallbackShip()` in `Ship.ts` is a one-line change.
 
 ## Environment variables reference
 

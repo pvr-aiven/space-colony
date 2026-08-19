@@ -3,6 +3,7 @@ import { SceneManager } from "./scene/SceneManager";
 import { HomeBase } from "./scene/HomeBase";
 import { Sites } from "./scene/Site";
 import { Ships } from "./scene/Ship";
+import { preloadShipModels } from "./scene/ShipModels";
 import { SolarSystem } from "./scene/SolarSystem";
 import { store } from "./state/gameState";
 import { connectionStatus } from "./state/connection";
@@ -71,9 +72,17 @@ async function refresh(): Promise<void> {
 // yet (or Aiven Runtime is mid-deploy), the game should recover on its own
 // once it becomes reachable, with the banner as the only visible symptom.
 async function bootstrap(): Promise<void> {
+  // Ship models are loaded before the first store.setState so that Ships can
+  // build real meshes on its very first sync instead of briefly showing the
+  // fallback primitives. preloadShipModels never rejects, so a model that
+  // fails to load costs the fallback, not the bootstrap.
   while (true) {
     try {
-      const [state, catalog] = await Promise.all([loadOrCreateSession(), getCatalog()]);
+      const [state, catalog] = await Promise.all([
+        loadOrCreateSession(),
+        getCatalog(),
+        preloadShipModels(),
+      ]);
       store.setCatalog(catalog);
       store.setState(state);
       connectionStatus.setOnline(true);
