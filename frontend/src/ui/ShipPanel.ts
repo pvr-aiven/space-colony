@@ -20,10 +20,10 @@ export class ShipPanel {
   private pendingRender = false;
 
   constructor(onError: (message: string) => void) {
+    // Positioning comes from the .side-column flex container it's mounted in
+    // (see main.ts) — no inline offsets here, or they'd override the column and
+    // reintroduce the overlap this panel used to cause.
     this.el.className = "build-menu";
-    this.el.style.top = "auto";
-    this.el.style.bottom = "16px";
-    this.el.style.right = "16px";
     this.onError = onError;
     store.subscribe(() => this.render());
     this.render();
@@ -121,7 +121,7 @@ export class ShipPanel {
           .join("");
         return `
           <div class="item" data-ship-id="${ship.id}">
-            <div>${ship.ship_code} · idle</div>
+            <div class="row-label">${ship.ship_code} · idle</div>
             <select class="site-select">${options}</select>
             <button data-dispatch="${ship.id}">Dispatch</button>
           </div>`;

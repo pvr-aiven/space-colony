@@ -33,6 +33,24 @@
   text-transform: uppercase;
 }
 
+/* The right-hand panels used to be positioned absolutely and independently —
+   one anchored to the top with a 60vh cap, one to the bottom with no cap — so
+   as soon as their combined height exceeded the viewport they overlapped, and
+   whichever came later in the DOM swallowed clicks meant for the other. This
+   column owns the full right-hand height instead and lays them out in flow, so
+   they can't collide however much content they hold. */
+.side-column {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  bottom: 16px;
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: none; /* gaps stay click-through to the 3D scene */
+}
+
 .build-menu {
   position: absolute;
   top: 16px;
@@ -46,6 +64,44 @@
   font-size: 13px;
   max-height: 60vh;
   overflow-y: auto;
+}
+
+/* Inside the column, panels size to their content and only shrink (and scroll
+   internally) once the column runs out of room — no growing to fill, which
+   would leave a short panel as a mostly-empty box. */
+.side-column > .build-menu {
+  position: static;
+  width: auto;
+  max-height: none;
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* A permanently visible scrollbar on the panels that scroll. Without it a row
+   pushed below the fold (the Quantum Gate, once the building list grew) looks
+   like it simply isn't there.
+   Deliberately NOT using the standard `scrollbar-width`/`scrollbar-color`
+   here: in Chrome those take precedence over the ::-webkit-scrollbar rules and
+   yield a 2px overlay bar that macOS hides at rest — i.e. no affordance at
+   all. The webkit pseudo-elements alone give a classic bar with a reserved
+   gutter, which stays visible. */
+.build-menu::-webkit-scrollbar {
+  width: 8px;
+}
+
+.build-menu::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
+}
+
+.build-menu::-webkit-scrollbar-thumb {
+  background: rgba(120, 170, 255, 0.45);
+  border-radius: 4px;
+}
+
+.build-menu::-webkit-scrollbar-thumb:hover {
+  background: rgba(120, 170, 255, 0.7);
 }
 
 .build-menu h3 {
@@ -65,8 +121,17 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.build-menu .item select {
+/* Fleet rows were three stacked lines each (label / select / button), which at
+   a 720px-tall viewport pushed the last building out of the panel entirely.
+   The label takes its own line and the select shares the next one with the
+   Dispatch button, saving ~28px per ship. */
+.build-menu .item .row-label {
   flex: 1 1 100%;
+}
+
+.build-menu .item select {
+  flex: 1 1 110px;
+  min-width: 0; /* lets the select shrink instead of overflowing the panel */
   background: #10182a;
   color: #e8f1ff;
   border: 1px solid rgba(120, 170, 255, 0.25);

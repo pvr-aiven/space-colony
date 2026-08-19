@@ -35,7 +35,14 @@ const basePanel = new BasePanel(showToast);
 const buildMenu = new BuildMenu(showToast);
 const shipPanel = new ShipPanel(showToast);
 const missionLog = new MissionLog();
-hud.append(connectionBanner.el, resourceBar.el, basePanel.el, buildMenu.el, shipPanel.el, missionLog.el);
+
+// Both right-hand panels share one flex column so they lay out in flow and
+// can never overlap each other, whatever their content height.
+const sideColumn = document.createElement("div");
+sideColumn.className = "side-column";
+sideColumn.append(buildMenu.el, shipPanel.el);
+
+hud.append(connectionBanner.el, resourceBar.el, basePanel.el, sideColumn, missionLog.el);
 
 const sceneManager = new SceneManager(container);
 const homeBase = new HomeBase();
