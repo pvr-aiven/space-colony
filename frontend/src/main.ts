@@ -46,7 +46,7 @@ sceneManager.scene.add(homeBase.group, sites.group, ships.group, solarSystem.gro
 sceneManager.onUpdate((dt) => {
   homeBase.update(dt);
   sites.update(dt);
-  ships.update(dt);
+  ships.update(dt, sceneManager.camera);
   solarSystem.update(dt);
 });
 sceneManager.start();

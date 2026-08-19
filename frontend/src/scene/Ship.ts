@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { store } from "../state/gameState";
 import { createShipModel } from "./ShipModels";
+import { QuantumFx, jumpChoreography } from "./QuantumFx";
 import type { Sites } from "./Site";
 
 const SHIP_COLORS: Record<string, number> = {
@@ -33,6 +34,7 @@ function buildFallbackShip(color: number): THREE.Object3D {
 export class Ships {
   readonly group = new THREE.Group();
   private objects = new Map<string, THREE.Object3D>();
+  private fx = new Map<string, QuantumFx>();
   private elapsed = 0;
 
   constructor(private sites: Sites) {
@@ -40,7 +42,31 @@ export class Ships {
     this.sync();
   }
 
-  update(dt: number): void {
+  private isDeepSite(siteId: string): boolean {
+    return store.getCatalog()?.sites.find((s) => s.id === siteId)?.kind === "deep_planet";
+  }
+
+  // One effect rig per ship currently making a quantum jump, created lazily and
+  // torn down when the jump ends so idle ships cost nothing.
+  private fxFor(shipId: string): QuantumFx {
+    let existing = this.fx.get(shipId);
+    if (!existing) {
+      existing = new QuantumFx();
+      this.group.add(existing.group);
+      this.fx.set(shipId, existing);
+    }
+    return existing;
+  }
+
+  private releaseFx(shipId: string): void {
+    const existing = this.fx.get(shipId);
+    if (!existing) return;
+    this.group.remove(existing.group);
+    existing.dispose();
+    this.fx.delete(shipId);
+  }
+
+  update(dt: number, camera: THREE.Camera): void {
     this.elapsed += dt;
     const state = store.getState();
     if (!state) return;
@@ -56,9 +82,6 @@ export class Ships {
         const eta = new Date(ship.eta_at).getTime();
         const progress = THREE.MathUtils.clamp((Date.now() - departed) / (eta - departed), 0, 1);
 
-        object.position.lerpVectors(HOME_POSITION, target, progress);
-        object.position.y += Math.sin(progress * Math.PI) * 1.5; // small arc, purely cosmetic
-
         // Heading comes from the straight-line home->site vector, not from the
         // frame-to-frame position delta. That delta is far too small to rely
         // on: a ~5-unit trip over a 200s ETA moves ~0.0004 units per frame, so
@@ -67,12 +90,38 @@ export class Ships {
         // orbit left it — ships flying backwards) or is so low it's just noise.
         // This is exact and frame-rate independent.
         const heading = target.clone().sub(HOME_POSITION);
+
+        if (this.isDeepSite(ship.current_site_id)) {
+          // Deep-space runs are quantum jumps: the ship charges at base, tears
+          // out, is absent for most of the ETA, then reappears near the target.
+          // Position is driven by the choreography rather than linear progress.
+          const { phase, travel, local } = jumpChoreography(progress);
+          object.position.lerpVectors(HOME_POSITION, target, travel);
+          const jumpDir = heading.clone().normalize();
+          object.visible = this.fxFor(ship.id).update(
+            dt,
+            phase,
+            local,
+            object.position,
+            jumpDir,
+            target,
+            camera,
+          );
+        } else {
+          this.releaseFx(ship.id);
+          object.visible = true;
+          object.position.lerpVectors(HOME_POSITION, target, progress);
+          object.position.y += Math.sin(progress * Math.PI) * 1.5; // small arc, purely cosmetic
+        }
+
         if (heading.lengthSq() > 1e-6) {
           // Nose is +Z on both the imported models and the fallback cone,
           // matching what Object3D.lookAt() aims — no correction needed.
           object.lookAt(object.position.clone().add(heading));
         }
       } else {
+        this.releaseFx(ship.id);
+        object.visible = true;
         const angle = (i / Math.max(state.ships.length, 1)) * Math.PI * 2 + this.elapsed * 0.15;
         object.position.set(
           Math.cos(angle) * IDLE_ORBIT_RADIUS,
@@ -93,6 +142,7 @@ export class Ships {
       if (!currentIds.has(id)) {
         this.group.remove(object);
         this.objects.delete(id);
+        this.releaseFx(id); // a destroyed ship must not leave its jump rig behind
       }
     }
 

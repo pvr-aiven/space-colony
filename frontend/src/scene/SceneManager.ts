@@ -1,5 +1,9 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 
 function buildStarfield(): THREE.Points {
   const count = 1200;
@@ -36,6 +40,8 @@ export class SceneManager {
   readonly camera: THREE.PerspectiveCamera;
   readonly renderer: THREE.WebGLRenderer;
   readonly controls: OrbitControls;
+  readonly composer: EffectComposer;
+  readonly bloomPass: UnrealBloomPass;
 
   private clock = new THREE.Clock();
   private updateCallbacks: Array<(dt: number) => void> = [];
@@ -86,6 +92,28 @@ export class SceneManager {
     this.controls.maxPolarAngle = Math.PI * 0.85;
     this.controls.update();
 
+    // Bloom is what makes the emissive/additive material work throughout the
+    // scene actually read as light rather than flat bright colour — and it's
+    // what sells the quantum jump flash. Threshold is high enough that only
+    // genuinely bright things (the sun, beacons, jump effects) glow, so the
+    // planets and hulls don't turn into mush.
+    //
+    // RenderPass draws into a linear render target, where WebGLRenderer skips
+    // tone mapping; OutputPass then applies the renderer's toneMapping and
+    // colour-space conversion once at the end. Keeping renderer.toneMapping
+    // set and adding OutputPass is therefore correct, not double-applied.
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.55, // strength
+      0.45, // radius
+      0.78, // luminance threshold — high enough that hulls and planets don't
+      //       bloom, leaving headroom for the jump flash to actually stand out
+    );
+    this.composer.addPass(this.bloomPass);
+    this.composer.addPass(new OutputPass());
+
     window.addEventListener("resize", () => this.onResize());
   }
 
@@ -99,7 +127,7 @@ export class SceneManager {
       this.starfield.rotation.y += dt * 0.002;
       this.controls.update();
       for (const cb of this.updateCallbacks) cb(dt);
-      this.renderer.render(this.scene, this.camera);
+      this.composer.render();
       requestAnimationFrame(tick);
     };
     tick();
@@ -109,5 +137,9 @@ export class SceneManager {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    // The composer owns its own render targets, so it needs resizing too or
+    // the scene renders at the old resolution and gets stretched.
+    this.composer.setSize(window.innerWidth, window.innerHeight);
+    this.bloomPass.setSize(window.innerWidth, window.innerHeight);
   }
 }
