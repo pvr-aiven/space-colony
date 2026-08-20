@@ -1,6 +1,6 @@
 import { store } from "../state/gameState";
 import { applyOptimisticCost, rollback } from "../state/optimistic";
-import { isSiteRevealed, travelBlockedReason } from "../state/siteAccess";
+import { siteBlockedReason } from "../state/siteAccess";
 import { ApiError, buildShip, dispatchShip } from "../api/client";
 import type { GameState } from "../types/api";
 
@@ -103,16 +103,15 @@ export class ShipPanel {
         </div>`;
     });
 
-    // Only revealed sites are offered at all; revealed-but-unreachable ones are
-    // listed disabled with the reason, so the quantum gate has a visible payoff
-    // rather than deep-space targets silently appearing later.
-    const revealedSites = catalog.sites.filter((site) => isSiteRevealed(site, state));
-
+    // Every site is listed, with unreachable ones disabled and labelled with the
+    // next missing prerequisite. Filtering them out instead (which this used to
+    // do for unrevealed sites) left the player unable to tell a destination that
+    // doesn't exist from one whose prerequisite they haven't built.
     const fleetRows = state.ships.map((ship) => {
       if (ship.status === "idle") {
-        const options = revealedSites
+        const options = catalog.sites
           .map((site) => {
-            const blocked = travelBlockedReason(site, state);
+            const blocked = siteBlockedReason(site, state);
             const label = blocked
               ? `${site.display_name} — ${blocked}`
               : `${site.display_name} (${site.travel_time_minutes}m)`;
@@ -126,7 +125,12 @@ export class ShipPanel {
             <button data-dispatch="${ship.id}">Dispatch</button>
           </div>`;
       }
-      return `<div class="item"><div>${ship.ship_code} · en route</div><div class="cost" data-eta="${ship.id}">${formatEta(ship.eta_at)}</div></div>`;
+      // Name the destination: a ship that's away has no dispatch controls, and
+      // without saying where it went that reads as the ship being unable to go
+      // anywhere rather than simply being busy.
+      const destination = catalog.sites.find((s) => s.id === ship.current_site_id)?.display_name;
+      const status = destination ? `en route → ${destination}` : ship.status.replace(/_/g, " ");
+      return `<div class="item"><div class="row-label">${ship.ship_code} · ${status}</div><div class="cost" data-eta="${ship.id}">${formatEta(ship.eta_at)}</div></div>`;
     });
 
     this.el.innerHTML = `

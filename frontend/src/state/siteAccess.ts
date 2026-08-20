@@ -24,8 +24,18 @@ export function isSiteTravelable(site: Site, state: GameState | null): boolean {
   return hasActiveBuilding(state, site.travel_requires);
 }
 
-// Human-readable reason a revealed site still can't be reached, for the UI.
-export function travelBlockedReason(site: Site, state: GameState | null): string | null {
-  if (isSiteTravelable(site, state)) return null;
-  return `needs ${site.travel_requires!.replace(/_/g, " ")}`;
+// The next thing standing between the player and this destination, walking the
+// chain: you need the sensor array before the quantum gate is any use, so name
+// whichever is missing first. Returning a reason for *unrevealed* sites too is
+// deliberate — a destination that silently vanishes from the list gives the
+// player no way to tell "doesn't exist" from "prerequisite missing".
+export function siteBlockedReason(site: Site, state: GameState | null): string | null {
+  const label = (code: string) => code.replace(/_/g, " ");
+  if (site.reveal_requires && !hasActiveBuilding(state, site.reveal_requires)) {
+    return `needs ${label(site.reveal_requires)}`;
+  }
+  if (site.travel_requires && !hasActiveBuilding(state, site.travel_requires)) {
+    return `needs ${label(site.travel_requires)}`;
+  }
+  return null;
 }
