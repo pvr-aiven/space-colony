@@ -284,33 +284,30 @@ function refineryModel(color: number, s: number): THREE.Object3D {
   return g;
 }
 
-// The endgame building, so it gets the most distinctive silhouette: a standing
-// ring with an energy membrane across it.
-function quantumGate(color: number, s: number): THREE.Object3D {
+// A free-floating ring: no plinth or pylons, since it hangs in open space
+// rather than standing on anything.
+//
+// Everything is centred on the group origin, which matters beyond looks — the
+// jump effects anchor to the gate's position, so the ring's centre has to *be*
+// that position. The earlier design raised the ring above a base, leaving the
+// effect firing a few units below the hole the ship flies through.
+function quantumGate(color: number, s: number, level: number): THREE.Object3D {
   const g = new THREE.Group();
-  put(g, new THREE.Mesh(new THREE.BoxGeometry(s * 0.7, s * 0.08, s * 0.3), hull()), 0, s * 0.04, 0);
+  const R = s * 0.34;
 
-  // Angled pylons bracing the ring.
-  for (const side of [-1, 1]) {
-    const pylon = new THREE.Mesh(new THREE.BoxGeometry(s * 0.07, s * 0.42, s * 0.07), structural());
-    pylon.position.set(side * s * 0.28, s * 0.24, 0);
-    pylon.rotation.z = side * 0.32;
-    g.add(pylon);
-  }
-
-  const ringY = s * 0.62;
-  const ring = put(g, new THREE.Mesh(new THREE.TorusGeometry(s * 0.34, s * 0.06, 8, 20), accent(color, { emissiveIntensity: 0.6 })), 0, ringY, 0);
+  put(g, new THREE.Mesh(new THREE.TorusGeometry(R, s * 0.06, 8, 24), accent(color, { emissiveIntensity: 0.6 })), 0, 0, 0);
 
   // Membrane across the ring: additive so it glows through rather than looking
-  // like a solid disc, and feeds the bloom pass.
-  const membrane = put(
+  // like a solid disc, and feeds the bloom pass. A higher-level gate holds a
+  // denser field.
+  put(
     g,
     new THREE.Mesh(
-      new THREE.CircleGeometry(s * 0.3, 20),
+      new THREE.CircleGeometry(R * 0.88, 24),
       new THREE.MeshBasicMaterial({
         color: 0xd8c8ff,
         transparent: true,
-        opacity: 0.3,
+        opacity: 0.22 + level * 0.1,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         side: THREE.DoubleSide,
@@ -318,27 +315,35 @@ function quantumGate(color: number, s: number): THREE.Object3D {
       }),
     ),
     0,
-    ringY,
+    0,
     0,
   );
-  void membrane;
-  void ring;
 
-  // Emitter nodes spaced around the ring.
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    put(
-      g,
-      new THREE.Mesh(new THREE.SphereGeometry(s * 0.045, 8, 6), glow(color, 1.8)),
-      Math.cos(a) * s * 0.34,
-      ringY + Math.sin(a) * s * 0.34,
-      0,
-    );
+  // Emitter nodes around the rim — more of them as the gate is upgraded.
+  const nodes = 6 + (level - 1) * 4;
+  for (let i = 0; i < nodes; i++) {
+    const a = (i / nodes) * Math.PI * 2;
+    put(g, new THREE.Mesh(new THREE.SphereGeometry(s * 0.045, 8, 6), glow(color, 1.8)), Math.cos(a) * R, Math.sin(a) * R, 0);
+  }
+
+  // Level 2+ adds an outer stabiliser ring on radial struts, so an upgraded
+  // gate is obviously a bigger installation and not just a brighter one.
+  if (level >= 2) {
+    const outerR = R * 1.4;
+    put(g, new THREE.Mesh(new THREE.TorusGeometry(outerR, s * 0.025, 6, 28), structural()), 0, 0, 0);
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      const strut = new THREE.Mesh(new THREE.BoxGeometry(s * 0.03, outerR - R, s * 0.03), structural());
+      const mid = (R + outerR) / 2;
+      strut.position.set(Math.cos(a) * mid, Math.sin(a) * mid, 0);
+      strut.rotation.z = a - Math.PI / 2;
+      g.add(strut);
+    }
   }
   return g;
 }
 
-const BUILDERS: Record<string, (color: number, scale: number) => THREE.Object3D> = {
+const BUILDERS: Record<string, (color: number, scale: number, level: number) => THREE.Object3D> = {
   solar_array: solarArray,
   mining_rig: miningRig,
   ice_extractor: iceExtractor,
@@ -368,8 +373,11 @@ export function buildBuildingModel(code: string, level: number, status: "constru
   const builder =
     BUILDERS[code] ??
     ((c: number, sc: number) => new THREE.Mesh(new THREE.BoxGeometry(sc * 0.5, sc * 0.5, sc * 0.5), accent(c)));
-  const model = builder(color, scale);
-  addLevelModules(model, level, color, scale);
+  const model = builder(color, scale, level);
+  // The gate expresses its level in its own geometry (extra emitter nodes, an
+  // outer stabiliser ring); the generic surface-mounted modules would just
+  // float around a structure that has no ground to bolt them to.
+  if (code !== "quantum_gate") addLevelModules(model, level, color, scale);
 
   if (status === "constructing") {
     model.traverse((child) => {
