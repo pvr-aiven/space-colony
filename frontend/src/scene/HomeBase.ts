@@ -43,12 +43,16 @@ export const QUANTUM_GATE_POSITION = new THREE.Vector3(-15, 2.5, 0);
  */
 export const QUANTUM_GATE_AXIS = QUANTUM_GATE_POSITION.clone().normalize();
 
-/** How far behind the ring a ship holds while it charges. */
-export const QUANTUM_GATE_STANDOFF = 4.5;
+/** How far behind the ring a ship holds while it charges. Kept close so the
+ *  waiting ship reads as lined up with the aperture, not parked off to one side. */
+export const QUANTUM_GATE_STANDOFF = 3.5;
 /** How far out along the corridor a ship accelerates before it jumps out. */
 export const QUANTUM_GATE_RUNWAY = 14;
 
-const QUANTUM_GATE_SCALE = 3.2;
+// Sized so the aperture is comfortably wider than a ship: at 3.2 the hole was
+// 1.39 in radius against a ~1.2-wide freighter, which technically fits but
+// read as the ship clipping past the rim rather than flying through it.
+const QUANTUM_GATE_SCALE = 5.0;
 
 function buildAtmosphere(): THREE.Mesh {
   // Slightly larger, translucent, additive-blended shell around the planet

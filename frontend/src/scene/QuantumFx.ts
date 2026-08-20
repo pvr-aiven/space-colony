@@ -142,14 +142,18 @@ export function jumpChoreography(progress: number): JumpState {
 
   // --- out to the holding point behind the ring, then the outbound jump ---
   if (progress < 0.1) return leg("cruise", progress / 0.1, "orbit", "gateBack", smooth(progress / 0.1));
-  if (progress < 0.18) return leg("charge", (progress - 0.1) / 0.08, "gateBack", "gateBack", 0);
-  if (progress < 0.24) {
+  if (progress < 0.16) return leg("charge", (progress - 0.1) / 0.06, "gateBack", "gateBack", 0);
+  if (progress < 0.26) {
     // Accelerates from behind the ring, through it, and out along the corridor
     // — squared so it visibly picks up speed as it passes through.
-    const local = (progress - 0.18) / 0.06;
+    //
+    // Given a generous share of the trip on purpose: at 6% of a 2-minute
+    // expedition the pass-through lasted ~7 seconds and was easy to miss
+    // entirely, which read as the ship never going through the ring at all.
+    const local = (progress - 0.16) / 0.1;
     return leg("launch", local, "gateBack", "gateFront", local * local);
   }
-  if (progress < 0.42) return leg("transit", (progress - 0.24) / 0.18, "gateFront", "site", 0);
+  if (progress < 0.42) return leg("transit", (progress - 0.26) / 0.16, "gateFront", "site", 0);
   if (progress < 0.5) {
     // Ramps to exactly 1: the next phase sits at the destination, so leaving a
     // gap made the ship pop the last stretch at the handover.
@@ -165,10 +169,12 @@ export function jumpChoreography(progress: number): JumpState {
     const local = (progress - 0.56) / 0.06;
     return leg("launch", local, "site", "gateFront", 0.12 * local * local);
   }
-  if (progress < 0.8) return leg("transit", (progress - 0.62) / 0.18, "site", "gateFront", 1);
+  if (progress < 0.76) return leg("transit", (progress - 0.62) / 0.14, "site", "gateFront", 1);
   if (progress < 0.88) {
-    // Emerges out along the corridor and decelerates back through the ring.
-    const local = (progress - 0.8) / 0.08;
+    // Emerges out along the corridor and decelerates back through the ring —
+    // the same generous share as the outbound pass, so the return is just as
+    // readable.
+    const local = (progress - 0.76) / 0.12;
     return leg("arrive", local, "gateFront", "gateBack", smooth(local));
   }
   const local = (progress - 0.88) / 0.12;
