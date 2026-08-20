@@ -98,30 +98,54 @@ function additiveShader(vert: string, frag: string, color: number): THREE.Shader
   });
 }
 
-export type JumpPhase = "charge" | "launch" | "transit" | "arrive" | "cruise";
+export type JumpPhase = "charge" | "launch" | "transit" | "arrive" | "dwell";
 
-// Maps raw expedition progress (0..1) onto the jump choreography. Returns the
-// phase plus how far along the ship should visually be, which is deliberately
-// *not* linear: the ship lingers at base charging up, blinks across the middle
-// of the trip, then reappears near the destination.
-export function jumpChoreography(progress: number): { phase: JumpPhase; travel: number; local: number } {
-  if (progress < 0.12) {
-    return { phase: "charge", travel: 0, local: progress / 0.12 };
-  }
-  if (progress < 0.2) {
-    const local = (progress - 0.12) / 0.08;
+export interface JumpState {
+  phase: JumpPhase;
+  /** 0..1 within the current phase. */
+  local: number;
+  /** true on the home -> site leg, false on the way back. */
+  outbound: boolean;
+  /** 0..1 from this leg's origin to its destination. */
+  travel: number;
+}
+
+// Maps raw expedition progress onto a full round trip: charge at base, jump
+// out, hold at the site, jump back, arrive home. Deliberately non-linear — the
+// ship lingers to charge, is absent across the middle of each leg, and
+// reappears near the far end.
+//
+// The expedition resolves when the ship gets *home* rather than when it reaches
+// the site, which is why the whole round trip fits inside the one ETA.
+export function jumpChoreography(progress: number): JumpState {
+  // --- outbound leg ---
+  if (progress < 0.1) return { phase: "charge", local: progress / 0.1, outbound: true, travel: 0 };
+  if (progress < 0.16) {
+    const local = (progress - 0.1) / 0.06;
     // Ease-in so the launch visibly accelerates out of the charge.
-    return { phase: "launch", travel: 0.15 * local * local, local };
+    return { phase: "launch", local, outbound: true, travel: 0.15 * local * local };
   }
-  if (progress < 0.8) {
-    return { phase: "transit", travel: 0.15, local: (progress - 0.2) / 0.6 };
+  if (progress < 0.42) return { phase: "transit", local: (progress - 0.16) / 0.26, outbound: true, travel: 0.15 };
+  if (progress < 0.5) {
+    // Ramp all the way to 1 rather than stopping at 0.9: the next phase sits at
+    // the destination, so leaving a gap made the ship pop the last stretch.
+    const local = (progress - 0.42) / 0.08;
+    return { phase: "arrive", local, outbound: true, travel: 0.9 + 0.1 * local };
   }
-  if (progress < 0.88) {
-    const local = (progress - 0.8) / 0.08;
-    return { phase: "arrive", travel: 0.85, local };
+
+  // --- holding at the site ---
+  if (progress < 0.56) return { phase: "dwell", local: (progress - 0.5) / 0.06, outbound: true, travel: 1 };
+
+  // --- return leg, same shape with the endpoints swapped ---
+  if (progress < 0.62) {
+    const local = (progress - 0.56) / 0.06;
+    return { phase: "launch", local, outbound: false, travel: 0.15 * local * local };
   }
+  if (progress < 0.88) return { phase: "transit", local: (progress - 0.62) / 0.26, outbound: false, travel: 0.15 };
+  // Finishes at exactly 1, i.e. the ship's live orbital slot, so the handover to
+  // the idle orbit when the backend flips the status is seamless.
   const local = (progress - 0.88) / 0.12;
-  return { phase: "cruise", travel: 0.85 + 0.15 * local, local };
+  return { phase: "arrive", local, outbound: false, travel: 0.9 + 0.1 * local };
 }
 
 export class QuantumFx {
@@ -169,7 +193,6 @@ export class QuantumFx {
     local: number,
     shipPos: THREE.Vector3,
     jumpDir: THREE.Vector3,
-    destination: THREE.Vector3,
     camera: THREE.Camera,
   ): boolean {
     this.elapsed += dt;
@@ -222,9 +245,9 @@ export class QuantumFx {
         shipVisible = local > 0.2;
         break;
       }
-      case "cruise": {
-        // Nothing left to show; the ship just flies the last stretch in.
-        void destination;
+      case "dwell": {
+        // Holding at the site between the two jumps: no effects, the ship just
+        // sits there so the round trip has a visible middle.
         break;
       }
     }

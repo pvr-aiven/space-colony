@@ -11,6 +11,13 @@ import { buildBuildingModel, disposeBuildingModel } from "./BuildingModels";
 // visually clip through them.
 const SLOT_RADIUS = 3.9;
 
+/**
+ * Planet rotation in rad/s. Exported because idle ships orbit at exactly this
+ * rate to stay geostationary — a ship parked over the base should hold station
+ * above the same spot, not drift past it.
+ */
+export const PLANET_SPIN_RATE = 0.05;
+
 function buildAtmosphere(): THREE.Mesh {
   // Slightly larger, translucent, additive-blended shell around the planet
   // — cheap stand-in for cloud cover without a texture/shader dependency.
@@ -60,7 +67,7 @@ export class HomeBase {
   }
 
   update(dt: number): void {
-    this.planet.rotation.y += dt * 0.05;
+    this.planet.rotation.y += dt * PLANET_SPIN_RATE;
     this.atmosphere.rotation.y -= dt * 0.02;
     this.atmosphere.rotation.x += dt * 0.008;
   }
