@@ -2,7 +2,13 @@ import * as THREE from "three";
 import { store } from "../state/gameState";
 import { createShipModel } from "./ShipModels";
 import { QuantumFx, jumpChoreography } from "./QuantumFx";
-import { PLANET_SPIN_RATE, QUANTUM_GATE_POSITION } from "./HomeBase";
+import {
+  PLANET_SPIN_RATE,
+  QUANTUM_GATE_AXIS,
+  QUANTUM_GATE_POSITION,
+  QUANTUM_GATE_RUNWAY,
+  QUANTUM_GATE_STANDOFF,
+} from "./HomeBase";
 import type { JumpAnchor } from "./QuantumFx";
 import type { Sites } from "./Site";
 
@@ -25,6 +31,8 @@ const _fwd = new THREE.Vector3();
 const _orbit = new THREE.Vector3();
 const _from = new THREE.Vector3();
 const _to = new THREE.Vector3();
+const _fxAt = new THREE.Vector3();
+const _fxAxis = new THREE.Vector3();
 const _aim = new THREE.Object3D();
 
 // Used when the GLB model for a ship type isn't available (still loading, or
@@ -154,21 +162,44 @@ export class Ships {
         const jump = jumpChoreography(progress);
         // The gate is a fixed point in space, so resolving anchors is a plain
         // lookup — no chasing a rotating parent's world matrix.
-        const anchor = (a: JumpAnchor, out: THREE.Vector3): THREE.Vector3 =>
-          a === "orbit" ? out.copy(home) : a === "gate" ? out.copy(QUANTUM_GATE_POSITION) : out.copy(site);
+        const anchor = (a: JumpAnchor, out: THREE.Vector3): THREE.Vector3 => {
+          switch (a) {
+            case "orbit":
+              return out.copy(home);
+            case "gateBack":
+              return out.copy(QUANTUM_GATE_POSITION).addScaledVector(QUANTUM_GATE_AXIS, -QUANTUM_GATE_STANDOFF);
+            case "gateFront":
+              return out.copy(QUANTUM_GATE_POSITION).addScaledVector(QUANTUM_GATE_AXIS, QUANTUM_GATE_RUNWAY);
+            default:
+              return out.copy(site);
+          }
+        };
 
         const from = anchor(jump.from, _from);
         const to = anchor(jump.to, _to);
         object.position.lerpVectors(from, to, jump.travel);
 
-        // A leg that starts and ends at the same anchor (charge, dwell) has no
-        // direction of its own — keep facing outward along the jump axis so the
-        // ship is lined up with the gate while it charges.
+        // Legs that start and end at the same anchor (charge, dwell) have no
+        // direction of their own; hold the corridor heading so a charging ship
+        // is already lined up to fly through the ring.
         if (from.distanceToSquared(to) > 1e-8) _fwd.copy(to).sub(from).normalize();
-        else _fwd.copy(site).sub(QUANTUM_GATE_POSITION).normalize();
+        else _fwd.copy(QUANTUM_GATE_AXIS);
 
-        object.visible = this.fxFor(ship.id).update(dt, jump.phase, jump.local, object.position, _fwd, camera);
-        // Aim along the jump axis; while hidden mid-transit there's nothing to
+        // Effects belong to the ring, not the ship: anchored at the ring centre
+        // and extending outward along the corridor, so they read as coming out
+        // of the gate while the ship flies through it. At the far site there's
+        // no ring, so they anchor on the ship and trail back the way it came.
+        if (jump.from === "site" || jump.to === "site") {
+          // The tube trails back the way the ship came, i.e. toward the gate.
+          _fxAt.copy(site);
+          _fxAxis.copy(QUANTUM_GATE_POSITION).sub(site).normalize();
+        } else {
+          _fxAt.copy(QUANTUM_GATE_POSITION);
+          _fxAxis.copy(QUANTUM_GATE_AXIS);
+        }
+
+        object.visible = this.fxFor(ship.id).update(dt, jump.phase, jump.local, _fxAt, _fxAxis, camera);
+        // Aim along the corridor; while hidden mid-transit there's nothing to
         // orient, and skipping it avoids spinning during the invisible stretch.
         if (object.visible) aimTowards(object, _fwd, dt);
         continue;

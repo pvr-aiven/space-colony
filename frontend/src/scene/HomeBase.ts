@@ -31,6 +31,23 @@ export const PLANET_SPIN_RATE = 0.05;
  * ~12 units), in a direction none of them occupy.
  */
 export const QUANTUM_GATE_POSITION = new THREE.Vector3(-15, 2.5, 0);
+
+/**
+ * Outward normal of the gate's ring — the jump corridor.
+ *
+ * Everything about a jump is expressed along this axis rather than along the
+ * line to the destination: ships wait behind the ring, accelerate through it,
+ * and the warp tube extends out the far side. Aiming the corridor at each
+ * site instead put the effect at a wild angle to the ring it was supposed to
+ * be coming out of (the deep sites sit in three quite different directions).
+ */
+export const QUANTUM_GATE_AXIS = QUANTUM_GATE_POSITION.clone().normalize();
+
+/** How far behind the ring a ship holds while it charges. */
+export const QUANTUM_GATE_STANDOFF = 4.5;
+/** How far out along the corridor a ship accelerates before it jumps out. */
+export const QUANTUM_GATE_RUNWAY = 14;
+
 const QUANTUM_GATE_SCALE = 3.2;
 
 function buildAtmosphere(): THREE.Mesh {
@@ -131,9 +148,10 @@ export class HomeBase {
       const model = buildBuildingModel(gate.building_code, gate.level, gate.status);
       model.scale.setScalar(QUANTUM_GATE_SCALE);
       model.position.copy(QUANTUM_GATE_POSITION);
-      // Ring axis pointing away from the planet, so ships pass out through it
-      // rather than across it.
-      model.lookAt(QUANTUM_GATE_POSITION.clone().multiplyScalar(2));
+      // The torus lies in its local XY plane with its axis along +Z, and
+      // lookAt aims +Z at the target — so this puts the ring's normal exactly
+      // along the jump corridor.
+      model.lookAt(QUANTUM_GATE_POSITION.clone().add(QUANTUM_GATE_AXIS));
       model.userData = { buildingId: gate.id };
       this.staticStructures.add(model);
     }

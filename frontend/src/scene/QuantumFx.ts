@@ -100,8 +100,15 @@ function additiveShader(vert: string, frag: string, color: number): THREE.Shader
 
 export type JumpPhase = "cruise" | "charge" | "launch" | "transit" | "arrive" | "dwell";
 
-/** Where a leg of the journey starts or ends. Resolved to world positions by the caller. */
-export type JumpAnchor = "orbit" | "gate" | "site";
+/**
+ * Where a leg of the journey starts or ends. Resolved to world positions by
+ * the caller.
+ *
+ * `gateBack` is the holding point behind the ring — the side the warp tube
+ * does *not* come out of, so a charging ship isn't sitting inside the effect.
+ * `gateFront` is out along the corridor, past the ring, where it vanishes.
+ */
+export type JumpAnchor = "orbit" | "gateBack" | "gateFront" | "site";
 
 export interface JumpState {
   phase: JumpPhase;
@@ -133,37 +140,39 @@ export function jumpChoreography(progress: number): JumpState {
     travel,
   });
 
-  // --- out to the gate, then the outbound jump ---
-  if (progress < 0.1) return leg("cruise", progress / 0.1, "orbit", "gate", smooth(progress / 0.1));
-  if (progress < 0.18) return leg("charge", (progress - 0.1) / 0.08, "gate", "gate", 0);
+  // --- out to the holding point behind the ring, then the outbound jump ---
+  if (progress < 0.1) return leg("cruise", progress / 0.1, "orbit", "gateBack", smooth(progress / 0.1));
+  if (progress < 0.18) return leg("charge", (progress - 0.1) / 0.08, "gateBack", "gateBack", 0);
   if (progress < 0.24) {
-    // Ease-in so the launch visibly accelerates out of the charge.
+    // Accelerates from behind the ring, through it, and out along the corridor
+    // — squared so it visibly picks up speed as it passes through.
     const local = (progress - 0.18) / 0.06;
-    return leg("launch", local, "gate", "site", 0.12 * local * local);
+    return leg("launch", local, "gateBack", "gateFront", local * local);
   }
-  if (progress < 0.42) return leg("transit", (progress - 0.24) / 0.18, "gate", "site", 0.12);
+  if (progress < 0.42) return leg("transit", (progress - 0.24) / 0.18, "gateFront", "site", 0);
   if (progress < 0.5) {
     // Ramps to exactly 1: the next phase sits at the destination, so leaving a
     // gap made the ship pop the last stretch at the handover.
     const local = (progress - 0.42) / 0.08;
-    return leg("arrive", local, "gate", "site", 0.88 + 0.12 * local);
+    return leg("arrive", local, "gateFront", "site", 0.88 + 0.12 * local);
   }
 
   // --- holding at the site ---
   if (progress < 0.56) return leg("dwell", (progress - 0.5) / 0.06, "site", "site", 0);
 
-  // --- return jump to the gate, then home ---
+  // --- return: the same corridor run in reverse ---
   if (progress < 0.62) {
     const local = (progress - 0.56) / 0.06;
-    return leg("launch", local, "site", "gate", 0.12 * local * local);
+    return leg("launch", local, "site", "gateFront", 0.12 * local * local);
   }
-  if (progress < 0.8) return leg("transit", (progress - 0.62) / 0.18, "site", "gate", 0.12);
+  if (progress < 0.8) return leg("transit", (progress - 0.62) / 0.18, "site", "gateFront", 1);
   if (progress < 0.88) {
+    // Emerges out along the corridor and decelerates back through the ring.
     const local = (progress - 0.8) / 0.08;
-    return leg("arrive", local, "site", "gate", 0.88 + 0.12 * local);
+    return leg("arrive", local, "gateFront", "gateBack", smooth(local));
   }
   const local = (progress - 0.88) / 0.12;
-  return leg("cruise", local, "gate", "orbit", smooth(local));
+  return leg("cruise", local, "gateBack", "orbit", smooth(local));
 }
 
 function smooth(t: number): number {
@@ -208,14 +217,24 @@ export class QuantumFx {
     [this.chargeMat, this.tunnelMat, this.flashMat].forEach((m) => m.dispose());
   }
 
-  // Returns whether the ship itself should be drawn this frame — during the
-  // middle of a jump it's "in transit" and deliberately absent.
+  /**
+   * Returns whether the ship itself should be drawn this frame — during the
+   * middle of a jump it's "in transit" and deliberately absent.
+   *
+   * @param epicentre Where the effect belongs: the ring centre at the gate, or
+   *   the ship's emergence point at a site. Effects are anchored here rather
+   *   than to the ship, so they stay put on the ring while the ship flies
+   *   through it.
+   * @param axis Unit vector the corridor extends along, *outward from the
+   *   epicentre*. The tube starts at the epicentre and runs this way, so it
+   *   reads as coming out of the ring rather than skewering it.
+   */
   update(
     dt: number,
     phase: JumpPhase,
     local: number,
-    shipPos: THREE.Vector3,
-    jumpDir: THREE.Vector3,
+    epicentre: THREE.Vector3,
+    axis: THREE.Vector3,
     camera: THREE.Camera,
   ): boolean {
     this.elapsed += dt;
@@ -224,8 +243,14 @@ export class QuantumFx {
     // Billboard the flash so it always faces the viewer.
     this.flash.quaternion.copy(camera.quaternion);
 
-    const tunnelQuat = new THREE.Quaternion().setFromUnitVectors(QuantumFx.UP, jumpDir);
-    this.tunnel.quaternion.copy(tunnelQuat);
+    // Cylinders are built along +Y, so rotate that onto the corridor axis, and
+    // offset by half a length so the tube's near end sits on the epicentre
+    // instead of the tube being centred on it.
+    this.tunnel.quaternion.setFromUnitVectors(QuantumFx.UP, axis);
+    this.tunnel.position.copy(epicentre).addScaledVector(axis, QuantumFx.TUBE_LENGTH * 0.5);
+
+    this.charge.position.copy(epicentre);
+    this.flash.position.copy(epicentre);
 
     let chargeI = 0;
     let tunnelI = 0;
@@ -234,19 +259,14 @@ export class QuantumFx {
 
     switch (phase) {
       case "charge": {
-        this.charge.position.copy(shipPos);
         this.charge.scale.setScalar(0.5 + local * 1.3);
         chargeI = local * 0.55;
         break;
       }
       case "launch": {
-        this.charge.position.copy(shipPos);
         this.charge.scale.setScalar(1.8 - local * 1.2);
         chargeI = (1 - local) * 0.55;
-        // Tube trails behind the ship, centred half a length back.
-        this.tunnel.position.copy(shipPos).addScaledVector(jumpDir, -QuantumFx.TUBE_LENGTH * 0.35);
         tunnelI = Math.sin(local * Math.PI) * 0.85;
-        this.flash.position.copy(shipPos);
         // Flash peaks right at the vanish point.
         flashI = Math.pow(local, 3) * 1.15;
         shipVisible = local < 0.85;
@@ -260,9 +280,7 @@ export class QuantumFx {
         break;
       }
       case "arrive": {
-        this.flash.position.copy(shipPos);
         flashI = Math.sin(local * Math.PI) * 1.05;
-        this.tunnel.position.copy(shipPos).addScaledVector(jumpDir, -QuantumFx.TUBE_LENGTH * 0.3);
         tunnelI = Math.sin(local * Math.PI) * 0.6;
         shipVisible = local > 0.2;
         break;
