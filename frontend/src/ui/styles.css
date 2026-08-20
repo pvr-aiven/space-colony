@@ -159,6 +159,20 @@
   cursor: not-allowed;
 }
 
+/* Camera control, not a gameplay action — outlined so it doesn't compete with
+   the solid blue buttons that actually spend resources. */
+.resource-bar button.ghost {
+  background: transparent;
+  border: 1px solid rgba(120, 170, 255, 0.4);
+  color: #bcd4ff;
+  white-space: nowrap;
+}
+
+.resource-bar button.ghost:hover {
+  background: rgba(63, 169, 255, 0.15);
+  border-color: rgba(120, 170, 255, 0.7);
+}
+
 .build-menu .cost {
   opacity: 0.6;
   font-size: 11px;

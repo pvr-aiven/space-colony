@@ -31,7 +31,9 @@ function showToast(message: string): void {
 
 const connectionBanner = new ConnectionBanner();
 const resourceBar = new ResourceBar();
-const basePanel = new BasePanel(showToast);
+// The callback is deferred, so referencing sceneManager (declared below) is
+// safe — it only runs once the button is actually clicked.
+const basePanel = new BasePanel(showToast, () => sceneManager.recenterOnHome());
 const buildMenu = new BuildMenu(showToast);
 const shipPanel = new ShipPanel(showToast);
 const missionLog = new MissionLog();

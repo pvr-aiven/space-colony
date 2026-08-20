@@ -3,14 +3,24 @@ import { applyOptimisticCost, rollback } from "../state/optimistic";
 import { ApiError, upgradeBase } from "../api/client";
 import type { GameState } from "../types/api";
 
+// Sits ahead of the tier chip so the camera control reads as a view affordance
+// rather than part of the base's stats. Title doubles as the discovery hint for
+// the arrow keys, which have no other visible affordance.
+const RECENTER_BUTTON = `
+  <button id="recenter-btn" class="ghost" title="Recenter on the home planet (pan with the arrow keys)">
+    ⌖ Recenter
+  </button>`;
+
 export class BasePanel {
   readonly el = document.createElement("div");
   private onError: (message: string) => void;
+  private onRecenter: () => void;
 
-  constructor(onError: (message: string) => void) {
+  constructor(onError: (message: string) => void, onRecenter: () => void) {
     this.el.className = "resource-bar";
     this.el.style.top = "64px";
     this.onError = onError;
+    this.onRecenter = onRecenter;
     store.subscribe(() => this.render());
     this.render();
   }
@@ -22,7 +32,10 @@ export class BasePanel {
 
     const nextTier = catalog.base_tiers.find((t) => t.tier === state.base.tier + 1);
     if (!nextTier || !nextTier.upgrade_cost) {
-      this.el.innerHTML = `<div class="resource"><span class="code">base</span><span>Tier ${state.base.tier} (max)</span></div>`;
+      this.el.innerHTML = `
+        ${RECENTER_BUTTON}
+        <div class="resource"><span class="code">base</span><span>Tier ${state.base.tier} (max)</span></div>`;
+      this.bind();
       return;
     }
 
@@ -35,9 +48,22 @@ export class BasePanel {
       .join(", ");
 
     this.el.innerHTML = `
+      ${RECENTER_BUTTON}
       <div class="resource"><span class="code">base</span><span>Tier ${state.base.tier}</span></div>
       <button id="upgrade-base-btn" ${affordable ? "" : "disabled"}>Upgrade to Tier ${nextTier.tier} (${costText})</button>
     `;
+    this.bind();
+  }
+
+  // Both branches replace innerHTML wholesale, so listeners have to be
+  // re-attached on every render, not just the first.
+  private bind(): void {
+    this.el.querySelector("#recenter-btn")?.addEventListener("click", (event) => {
+      this.onRecenter();
+      // Keeping focus would send subsequent arrow keys to the button, and a
+      // focused button also keeps the pressed styling stuck on.
+      (event.currentTarget as HTMLElement).blur();
+    });
     this.el.querySelector("#upgrade-base-btn")?.addEventListener("click", () => this.onUpgrade());
   }
 

@@ -72,6 +72,18 @@ in one shot if you want a clean slate.
 Run `make help` any time for the full command list, including
 `seed-prod` for a real Aiven service, described next.
 
+### Camera controls
+
+| Input | Action |
+|---|---|
+| Drag | Orbit around the current focus point |
+| Scroll | Zoom (8–160 units) |
+| Arrow keys | Pan across the system, at a speed proportional to zoom |
+| **⌖ Recenter** | Glide back onto the home planet, keeping the current zoom and angle |
+
+Arrow keys deliberately do nothing while a dropdown or text field has focus, so
+the fleet panel's site selector keeps its own keyboard navigation.
+
 ## Local end-to-end check with Docker Compose
 
 Before trusting a change to Aiven Runtime, it's worth running the exact
