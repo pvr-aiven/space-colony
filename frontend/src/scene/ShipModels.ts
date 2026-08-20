@@ -27,15 +27,9 @@ function normalize(model: THREE.Object3D, shipCode: string): THREE.Object3D {
   // freely without fighting the centering/scaling applied to the inner one.
   const wrapper = new THREE.Group();
 
-  const box = new THREE.Box3().setFromObject(model);
-  const size = box.getSize(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
+  const size = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
   const longest = Math.max(size.x, size.y, size.z) || 1;
   const scale = (TARGET_LENGTH[shipCode] ?? 1.5) / longest;
-
-  model.position.sub(center); // re-center on its own origin before scaling
-  model.scale.setScalar(scale);
-  model.position.multiplyScalar(scale);
 
   // These models are Y-up with the nose along -Z (their bounding boxes show Y
   // as the flattest axis and Z as the longest, and the tapered end sits on
@@ -44,6 +38,16 @@ function normalize(model: THREE.Object3D, shipCode: string): THREE.Object3D {
   // lookAt() flies tail-first. Yaw 180° here so the nose becomes +Z and
   // lookAt() points it the right way round.
   model.rotation.y = Math.PI;
+  model.scale.setScalar(scale);
+
+  // Re-center LAST, measuring the model as it will actually be drawn.
+  // Centering before the yaw is what put the hull ~3.7 units off its own
+  // origin: a matrix composes as T * R * S, so a rotation set afterwards
+  // spins the content about the origin *after* the centering offset was
+  // computed — for a 180° yaw that doubles the X/Z error instead of
+  // cancelling it. Which is why ships appeared to fly beside the quantum
+  // gate while every position log said they were dead centre.
+  model.position.sub(new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3()));
 
   wrapper.add(model);
   return wrapper;
