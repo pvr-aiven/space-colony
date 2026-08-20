@@ -98,54 +98,77 @@ function additiveShader(vert: string, frag: string, color: number): THREE.Shader
   });
 }
 
-export type JumpPhase = "charge" | "launch" | "transit" | "arrive" | "dwell";
+export type JumpPhase = "cruise" | "charge" | "launch" | "transit" | "arrive" | "dwell";
+
+/** Where a leg of the journey starts or ends. Resolved to world positions by the caller. */
+export type JumpAnchor = "orbit" | "gate" | "site";
 
 export interface JumpState {
   phase: JumpPhase;
   /** 0..1 within the current phase. */
   local: number;
-  /** true on the home -> site leg, false on the way back. */
-  outbound: boolean;
-  /** 0..1 from this leg's origin to its destination. */
+  from: JumpAnchor;
+  to: JumpAnchor;
+  /** 0..1 from `from` to `to`. */
   travel: number;
 }
 
-// Maps raw expedition progress onto a full round trip: charge at base, jump
-// out, hold at the site, jump back, arrive home. Deliberately non-linear — the
-// ship lingers to charge, is absent across the middle of each leg, and
-// reappears near the far end.
+// Maps raw expedition progress onto the full journey. The ship flies out to the
+// quantum gate under its own power, jumps from there, holds at the site, jumps
+// back to the gate, and cruises home to its orbital slot.
 //
-// The expedition resolves when the ship gets *home* rather than when it reaches
+// Routing through the gate matters for more than flavour: the jump effects
+// anchor to the ship, so the ship has to actually *be* at the gate for them to
+// line up with it. Charging at its parking slot instead is what made the effect
+// appear off to one side of the structure.
+//
+// The expedition resolves when the ship gets home rather than when it reaches
 // the site, which is why the whole round trip fits inside the one ETA.
 export function jumpChoreography(progress: number): JumpState {
-  // --- outbound leg ---
-  if (progress < 0.1) return { phase: "charge", local: progress / 0.1, outbound: true, travel: 0 };
-  if (progress < 0.16) {
-    const local = (progress - 0.1) / 0.06;
+  const leg = (phase: JumpPhase, local: number, from: JumpAnchor, to: JumpAnchor, travel: number): JumpState => ({
+    phase,
+    local,
+    from,
+    to,
+    travel,
+  });
+
+  // --- out to the gate, then the outbound jump ---
+  if (progress < 0.1) return leg("cruise", progress / 0.1, "orbit", "gate", smooth(progress / 0.1));
+  if (progress < 0.18) return leg("charge", (progress - 0.1) / 0.08, "gate", "gate", 0);
+  if (progress < 0.24) {
     // Ease-in so the launch visibly accelerates out of the charge.
-    return { phase: "launch", local, outbound: true, travel: 0.15 * local * local };
+    const local = (progress - 0.18) / 0.06;
+    return leg("launch", local, "gate", "site", 0.12 * local * local);
   }
-  if (progress < 0.42) return { phase: "transit", local: (progress - 0.16) / 0.26, outbound: true, travel: 0.15 };
+  if (progress < 0.42) return leg("transit", (progress - 0.24) / 0.18, "gate", "site", 0.12);
   if (progress < 0.5) {
-    // Ramp all the way to 1 rather than stopping at 0.9: the next phase sits at
-    // the destination, so leaving a gap made the ship pop the last stretch.
+    // Ramps to exactly 1: the next phase sits at the destination, so leaving a
+    // gap made the ship pop the last stretch at the handover.
     const local = (progress - 0.42) / 0.08;
-    return { phase: "arrive", local, outbound: true, travel: 0.9 + 0.1 * local };
+    return leg("arrive", local, "gate", "site", 0.88 + 0.12 * local);
   }
 
   // --- holding at the site ---
-  if (progress < 0.56) return { phase: "dwell", local: (progress - 0.5) / 0.06, outbound: true, travel: 1 };
+  if (progress < 0.56) return leg("dwell", (progress - 0.5) / 0.06, "site", "site", 0);
 
-  // --- return leg, same shape with the endpoints swapped ---
+  // --- return jump to the gate, then home ---
   if (progress < 0.62) {
     const local = (progress - 0.56) / 0.06;
-    return { phase: "launch", local, outbound: false, travel: 0.15 * local * local };
+    return leg("launch", local, "site", "gate", 0.12 * local * local);
   }
-  if (progress < 0.88) return { phase: "transit", local: (progress - 0.62) / 0.26, outbound: false, travel: 0.15 };
-  // Finishes at exactly 1, i.e. the ship's live orbital slot, so the handover to
-  // the idle orbit when the backend flips the status is seamless.
+  if (progress < 0.8) return leg("transit", (progress - 0.62) / 0.18, "site", "gate", 0.12);
+  if (progress < 0.88) {
+    const local = (progress - 0.8) / 0.08;
+    return leg("arrive", local, "site", "gate", 0.88 + 0.12 * local);
+  }
   const local = (progress - 0.88) / 0.12;
-  return { phase: "arrive", local, outbound: false, travel: 0.9 + 0.1 * local };
+  return leg("cruise", local, "gate", "orbit", smooth(local));
+}
+
+function smooth(t: number): number {
+  const x = t < 0 ? 0 : t > 1 ? 1 : t;
+  return x * x * (3 - 2 * x);
 }
 
 export class QuantumFx {
@@ -230,11 +253,10 @@ export class QuantumFx {
         break;
       }
       case "transit": {
+        // Nothing at all: the ship is gone. This used to keep a faint tube
+        // decaying across the whole phase, which on a multi-minute expedition
+        // meant the effect sat there lit long after the ship had left.
         shipVisible = false;
-        // A faint tube lingering at the departure point sells "something just
-        // tore through here" without keeping the full effect on screen.
-        tunnelI = Math.max(0, 0.10 - local * 0.10);
-        this.tunnel.position.copy(shipPos).addScaledVector(jumpDir, -QuantumFx.TUBE_LENGTH * 0.35);
         break;
       }
       case "arrive": {
@@ -245,9 +267,10 @@ export class QuantumFx {
         shipVisible = local > 0.2;
         break;
       }
-      case "dwell": {
-        // Holding at the site between the two jumps: no effects, the ship just
-        // sits there so the round trip has a visible middle.
+      case "dwell":
+      case "cruise": {
+        // Holding at the site, or flying between orbit and the gate under
+        // normal power — no jump effects in either case.
         break;
       }
     }

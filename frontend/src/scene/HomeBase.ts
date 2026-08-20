@@ -18,6 +18,21 @@ const SLOT_RADIUS = 3.9;
  */
 export const PLANET_SPIN_RATE = 0.05;
 
+/**
+ * The quantum gate is the one "building" rendered as a fixed installation out
+ * in space rather than bolted to the planet surface.
+ *
+ * It has to be static: ships jump *from* the gate, so the jump effects anchor
+ * to this point. While it rode the rotating surface slot ring, the effects
+ * (which follow the ship) had no relation to where the gate actually was —
+ * the ship charged and vanished off to one side of it.
+ *
+ * Well outside both the orbit ring (radius 8) and every local site (all within
+ * ~12 units), in a direction none of them occupy.
+ */
+export const QUANTUM_GATE_POSITION = new THREE.Vector3(-15, 2.5, 0);
+const QUANTUM_GATE_SCALE = 3.2;
+
 function buildAtmosphere(): THREE.Mesh {
   // Slightly larger, translucent, additive-blended shell around the planet
   // — cheap stand-in for cloud cover without a texture/shader dependency.
@@ -38,6 +53,8 @@ export class HomeBase {
   private planet: THREE.Mesh;
   private atmosphere: THREE.Mesh;
   private buildingSlots = new THREE.Group();
+  /** Installations that must NOT inherit the planet's spin — currently the quantum gate. */
+  private staticStructures = new THREE.Group();
   /** Signature of the building set currently rendered, to skip no-op rebuilds. */
   private builtKey = "";
 
@@ -60,7 +77,9 @@ export class HomeBase {
     // are meant to be attached to the planet, so they should inherit its
     // spin exactly rather than drifting at their own independent rate.
     this.planet.add(this.buildingSlots);
-    this.group.add(this.planet, this.atmosphere);
+    // staticStructures is a sibling of the planet, so it keeps a fixed
+    // world position instead of being carried around by the spin.
+    this.group.add(this.planet, this.atmosphere, this.staticStructures);
 
     store.subscribe(() => this.syncBuildings());
     this.syncBuildings();
@@ -86,11 +105,16 @@ export class HomeBase {
 
     for (const child of [...this.buildingSlots.children]) disposeBuildingModel(child);
     this.buildingSlots.clear();
+    for (const child of [...this.staticStructures.children]) disposeBuildingModel(child);
+    this.staticStructures.clear();
 
-    const buildingsWithSlot = state.buildings;
-    const total = Math.max(buildingsWithSlot.length, 1);
+    // The quantum gate is placed separately, so surface buildings share the
+    // slot ring between themselves rather than leaving a gap where the gate
+    // would have been.
+    const surface = state.buildings.filter((b) => b.building_code !== "quantum_gate");
+    const total = Math.max(surface.length, 1);
 
-    buildingsWithSlot.forEach((building, i) => {
+    surface.forEach((building, i) => {
       const angle = (i / total) * Math.PI * 2;
       const x = Math.cos(angle) * SLOT_RADIUS;
       const z = Math.sin(angle) * SLOT_RADIUS;
@@ -101,5 +125,17 @@ export class HomeBase {
       model.userData = { buildingId: building.id };
       this.buildingSlots.add(model);
     });
+
+    const gate = state.buildings.find((b) => b.building_code === "quantum_gate");
+    if (gate) {
+      const model = buildBuildingModel(gate.building_code, gate.level, gate.status);
+      model.scale.setScalar(QUANTUM_GATE_SCALE);
+      model.position.copy(QUANTUM_GATE_POSITION);
+      // Ring axis pointing away from the planet, so ships pass out through it
+      // rather than across it.
+      model.lookAt(QUANTUM_GATE_POSITION.clone().multiplyScalar(2));
+      model.userData = { buildingId: gate.id };
+      this.staticStructures.add(model);
+    }
   }
 }

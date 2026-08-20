@@ -2,7 +2,8 @@ import * as THREE from "three";
 import { store } from "../state/gameState";
 import { createShipModel } from "./ShipModels";
 import { QuantumFx, jumpChoreography } from "./QuantumFx";
-import { PLANET_SPIN_RATE } from "./HomeBase";
+import { PLANET_SPIN_RATE, QUANTUM_GATE_POSITION } from "./HomeBase";
+import type { JumpAnchor } from "./QuantumFx";
 import type { Sites } from "./Site";
 
 const SHIP_COLORS: Record<string, number> = {
@@ -22,6 +23,8 @@ const _pos = new THREE.Vector3();
 const _prev = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
 const _orbit = new THREE.Vector3();
+const _from = new THREE.Vector3();
+const _to = new THREE.Vector3();
 const _aim = new THREE.Object3D();
 
 // Used when the GLB model for a ship type isn't available (still loading, or
@@ -149,11 +152,21 @@ export class Ships {
 
       if (this.isDeepSite(ship.current_site_id!)) {
         const jump = jumpChoreography(progress);
-        const from = jump.outbound ? home : site;
-        const to = jump.outbound ? site : home;
+        // The gate is a fixed point in space, so resolving anchors is a plain
+        // lookup — no chasing a rotating parent's world matrix.
+        const anchor = (a: JumpAnchor, out: THREE.Vector3): THREE.Vector3 =>
+          a === "orbit" ? out.copy(home) : a === "gate" ? out.copy(QUANTUM_GATE_POSITION) : out.copy(site);
+
+        const from = anchor(jump.from, _from);
+        const to = anchor(jump.to, _to);
         object.position.lerpVectors(from, to, jump.travel);
 
-        _fwd.copy(to).sub(from).normalize();
+        // A leg that starts and ends at the same anchor (charge, dwell) has no
+        // direction of its own — keep facing outward along the jump axis so the
+        // ship is lined up with the gate while it charges.
+        if (from.distanceToSquared(to) > 1e-8) _fwd.copy(to).sub(from).normalize();
+        else _fwd.copy(site).sub(QUANTUM_GATE_POSITION).normalize();
+
         object.visible = this.fxFor(ship.id).update(dt, jump.phase, jump.local, object.position, _fwd, camera);
         // Aim along the jump axis; while hidden mid-transit there's nothing to
         // orient, and skipping it avoids spinning during the invisible stretch.
